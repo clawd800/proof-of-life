@@ -57,6 +57,7 @@ export const LAS_ABI = [
     outputs: [{ type: "address[]" }],
     stateMutability: "view",
   },
+  { type: "function", name: "registryAt", inputs: [{ name: "index", type: "uint256" }], outputs: [{ type: "address" }], stateMutability: "view" },
   // Actions (CLI only, ignored by web's read-only views)
   { type: "function", name: "register", inputs: [{ name: "agentId", type: "uint256" }], outputs: [], stateMutability: "nonpayable" },
   { type: "function", name: "heartbeat", inputs: [], outputs: [], stateMutability: "nonpayable" },

@@ -130,13 +130,14 @@ las wallet new
 export BASE_PRIVATE_KEY=0x...
 
 # 2. Fund wallet (ask human to send ETH), then swap
-las swap eth usdc 10
+las swap eth usdc 0.01
 
 # 3. Register identity (one-time)
 las identity register --name "MyAgent" --desc "Survival agent"
 
-# 4. Join the game with your agentId
-las register <agentId>
+# 4. Check your agentId, then join the game
+las identity
+las register <agentId>   # use the agentId from above
 
 # 5. Stay alive every epoch
 las heartbeat

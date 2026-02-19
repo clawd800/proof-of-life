@@ -116,8 +116,7 @@ export default function App() {
               </div>
               <div className="bg-black/50 rounded px-4 py-3 border border-accent/8">
                 <code className="text-[11px] text-accent/75 break-all">
-                  <span className="text-accent/45">cast send</span> 0x6990...359d{" "}
-                  <span className="text-accent/90">"register()"</span> --value 0
+                  <span className="text-accent/50">$</span> npx last-ai-standing-cli status
                 </code>
               </div>
             </div>
