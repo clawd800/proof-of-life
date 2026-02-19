@@ -8,6 +8,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 /// @title LastAIStanding — Darwinian survival protocol for AI agents
 /// @notice Agents pay COST_PER_EPOCH USDC per epoch to stay alive. Dead agents' funds go to survivors.
 /// @dev Uses MasterChef-style reward accounting with age-weighted distribution.
+///      Gas-optimized: struct packing (3 slots), state packing, unchecked safe math.
 ///
 /// PERPETUAL GAME
 /// --------------
@@ -58,11 +59,15 @@ contract LastAIStanding is ReentrancyGuard {
     uint256 public constant PRECISION = 1e18;
 
     // ─── Agent State ─────────────────────────────────────────────────────
+    /// @dev Packed into 3 storage slots (down from 4).
+    ///      Slot 0: birthEpoch(64) + lastHeartbeatEpoch(64) + alive(8) + totalPaid(96) = 232 bits
+    ///      Slot 1: rewardDebt(256)
+    ///      Slot 2: claimable(256)
     struct Agent {
         uint64 birthEpoch;
         uint64 lastHeartbeatEpoch;
         bool alive;
-        uint256 totalPaid;
+        uint96 totalPaid;
         uint256 rewardDebt;
         uint256 claimable;
     }
@@ -71,13 +76,15 @@ contract LastAIStanding is ReentrancyGuard {
     address[] public registry;
 
     // ─── Global State ────────────────────────────────────────────────────
-    uint256 public totalAlive;
+    /// @dev Packed: totalAlive + totalDead + totalEverRegistered in 1 slot (192 bits)
+    uint64 public totalAlive;
+    uint64 public totalDead;
+    uint64 public totalEverRegistered;
+
     uint256 public totalAge; // sum of all living agents' current ages
     uint256 public accRewardPerAge; // accumulated reward per 1 unit of age (×PRECISION)
 
     // ─── Stats ───────────────────────────────────────────────────────────
-    uint256 public totalEverRegistered;
-    uint256 public totalDead;
     uint256 public totalRewardsDistributed;
 
     // ─── Events ──────────────────────────────────────────────────────────
@@ -95,14 +102,13 @@ contract LastAIStanding is ReentrancyGuard {
     error NotDeadYet();
     error NothingToClaim();
     error InvalidRange();
-
-    // ─── Constructor ─────────────────────────────────────────────────────
     error InvalidConfig();
 
+    // ─── Constructor ─────────────────────────────────────────────────────
     constructor(address _usdc, uint256 _epochDuration, uint256 _costPerEpoch) {
         if (_usdc == address(0)) revert InvalidConfig();
         if (_epochDuration == 0) revert InvalidConfig();
-        if (_costPerEpoch == 0) revert InvalidConfig();
+        if (_costPerEpoch == 0 || _costPerEpoch > type(uint96).max) revert InvalidConfig();
         usdc = IERC20(_usdc);
         EPOCH_DURATION = _epochDuration;
         COST_PER_EPOCH = _costPerEpoch;
@@ -122,7 +128,7 @@ contract LastAIStanding is ReentrancyGuard {
 
     // ─── Views ───────────────────────────────────────────────────────────
 
-    /// @notice Current epoch number (hours since Unix epoch)
+    /// @notice Current epoch number
     function currentEpoch() public view returns (uint256) {
         return block.timestamp / EPOCH_DURATION;
     }
@@ -131,31 +137,43 @@ contract LastAIStanding is ReentrancyGuard {
     /// @dev For dead agents, returns age at time of death (tombstone value).
     function getAge(address addr) public view returns (uint256) {
         Agent storage a = agents[addr];
-        if (a.birthEpoch == 0) return 0;
-        return a.lastHeartbeatEpoch - a.birthEpoch + 1;
+        uint64 birth = a.birthEpoch;
+        if (birth == 0) return 0;
+        unchecked {
+            return uint256(a.lastHeartbeatEpoch) - uint256(birth) + 1;
+        }
     }
 
     /// @notice Whether agent is currently alive (accounts for missed epochs)
     function isAlive(address addr) public view returns (bool) {
         Agent storage a = agents[addr];
         if (!a.alive) return false;
-        return currentEpoch() <= uint256(a.lastHeartbeatEpoch) + 1;
+        unchecked {
+            return currentEpoch() <= uint256(a.lastHeartbeatEpoch) + 1;
+        }
     }
 
     /// @notice Whether agent can be killed (missed their heartbeat window)
     function isKillable(address addr) public view returns (bool) {
         Agent storage a = agents[addr];
         if (!a.alive) return false;
-        return currentEpoch() > uint256(a.lastHeartbeatEpoch) + 1;
+        unchecked {
+            return currentEpoch() > uint256(a.lastHeartbeatEpoch) + 1;
+        }
     }
 
     /// @notice Pending claimable reward for an agent
     function pendingReward(address addr) public view returns (uint256) {
         Agent storage a = agents[addr];
-        if (a.birthEpoch == 0) return 0;
+        uint64 birth = a.birthEpoch;
+        if (birth == 0) return 0;
         if (!a.alive) return a.claimable;
-        uint256 age = uint256(a.lastHeartbeatEpoch) - uint256(a.birthEpoch) + 1;
-        return (age * accRewardPerAge / PRECISION) - a.rewardDebt + a.claimable;
+        uint256 _acc = accRewardPerAge;
+        uint256 age;
+        unchecked {
+            age = uint256(a.lastHeartbeatEpoch) - uint256(birth) + 1;
+        }
+        return (age * _acc / PRECISION) - a.rewardDebt + a.claimable;
     }
 
     /// @notice Total USDC held in the contract (survival pool)
@@ -163,7 +181,7 @@ contract LastAIStanding is ReentrancyGuard {
         return usdc.balanceOf(address(this));
     }
 
-    /// @notice Total number of agents ever registered
+    /// @notice Total number of unique agents ever registered
     function registryLength() external view returns (uint256) {
         return registry.length;
     }
@@ -181,46 +199,56 @@ contract LastAIStanding is ReentrancyGuard {
         uint256 startIndex,
         uint256 endIndex
     ) external view returns (AgentInfo[] memory agentList) {
-        if (registry.length == 0) return new AgentInfo[](0);
+        uint256 len = registry.length;
+        if (len == 0) return new AgentInfo[](0);
         if (startIndex > endIndex) revert InvalidRange();
 
-        if (endIndex >= registry.length) {
-            endIndex = registry.length - 1;
+        if (endIndex >= len) {
+            endIndex = len - 1;
         }
 
-        uint256 length = endIndex - startIndex + 1;
+        uint256 length;
+        unchecked { length = endIndex - startIndex + 1; }
         agentList = new AgentInfo[](length);
         uint256 epoch = currentEpoch();
+        uint256 _acc = accRewardPerAge;
 
-        for (uint256 i = 0; i < length; i++) {
-            address addr = registry[startIndex + i];
+        for (uint256 i; i < length;) {
+            address addr;
+            unchecked { addr = registry[startIndex + i]; }
             Agent storage a = agents[addr];
 
+            uint64 birth = a.birthEpoch;
+            uint64 lastHB = a.lastHeartbeatEpoch;
             bool alive_ = a.alive;
-            bool killable_ = alive_ && epoch > uint256(a.lastHeartbeatEpoch) + 1;
-            uint256 age_ = (a.birthEpoch == 0)
-                ? 0
-                : uint256(a.lastHeartbeatEpoch) - uint256(a.birthEpoch) + 1;
+
+            bool killable_;
+            uint256 age_;
+            unchecked {
+                killable_ = alive_ && epoch > uint256(lastHB) + 1;
+                age_ = birth == 0 ? 0 : uint256(lastHB) - uint256(birth) + 1;
+            }
 
             uint256 reward_;
-            if (a.birthEpoch == 0) {
+            if (birth == 0) {
                 reward_ = 0;
             } else if (!alive_) {
                 reward_ = a.claimable;
             } else {
-                reward_ = (age_ * accRewardPerAge / PRECISION) - a.rewardDebt + a.claimable;
+                reward_ = (age_ * _acc / PRECISION) - a.rewardDebt + a.claimable;
             }
 
             agentList[i] = AgentInfo({
                 addr: addr,
-                birthEpoch: a.birthEpoch,
-                lastHeartbeatEpoch: a.lastHeartbeatEpoch,
+                birthEpoch: birth,
+                lastHeartbeatEpoch: lastHB,
                 alive: alive_,
                 killable: killable_,
                 age: age_,
                 totalPaid: a.totalPaid,
                 pendingReward: reward_
             });
+            unchecked { ++i; }
         }
     }
 
@@ -232,41 +260,52 @@ contract LastAIStanding is ReentrancyGuard {
         uint256 startIndex,
         uint256 endIndex
     ) external view returns (address[] memory) {
-        if (registry.length == 0) return new address[](0);
+        uint256 len = registry.length;
+        if (len == 0) return new address[](0);
         if (startIndex > endIndex) revert InvalidRange();
 
-        if (endIndex >= registry.length) {
-            endIndex = registry.length - 1;
+        if (endIndex >= len) {
+            endIndex = len - 1;
         }
 
         uint256 epoch = currentEpoch();
-        uint256 rangeLen = endIndex - startIndex + 1;
+        uint256 rangeLen;
+        unchecked { rangeLen = endIndex - startIndex + 1; }
 
         // First pass: count killable in range
-        uint256 count = 0;
-        for (uint256 i = 0; i < rangeLen; i++) {
+        uint256 count;
+        for (uint256 i; i < rangeLen;) {
             Agent storage a = agents[registry[startIndex + i]];
-            if (a.alive && epoch > uint256(a.lastHeartbeatEpoch) + 1) {
-                count++;
+            if (a.alive) {
+                unchecked {
+                    if (epoch > uint256(a.lastHeartbeatEpoch) + 1) ++count;
+                }
             }
+            unchecked { ++i; }
         }
 
         // Second pass: populate array
         address[] memory result = new address[](count);
-        uint256 idx = 0;
-        for (uint256 i = 0; i < rangeLen && idx < count; i++) {
+        uint256 idx;
+        for (uint256 i; i < rangeLen;) {
             address addr = registry[startIndex + i];
             Agent storage a = agents[addr];
-            if (a.alive && epoch > uint256(a.lastHeartbeatEpoch) + 1) {
-                result[idx++] = addr;
+            if (a.alive) {
+                unchecked {
+                    if (epoch > uint256(a.lastHeartbeatEpoch) + 1) {
+                        result[idx] = addr;
+                        if (++idx == count) break;
+                    }
+                }
             }
+            unchecked { ++i; }
         }
         return result;
     }
 
     // ─── Actions ─────────────────────────────────────────────────────────
 
-    /// @notice Register as a new agent. Costs 1 USDC (covers first epoch).
+    /// @notice Register as a new agent. Costs COST_PER_EPOCH USDC (covers first epoch).
     /// @dev Caller must approve USDC before calling. Dead agents can re-register.
     function register() external nonReentrant {
         Agent storage a = agents[msg.sender];
@@ -275,20 +314,23 @@ contract LastAIStanding is ReentrancyGuard {
         uint256 epoch = currentEpoch();
         uint256 previousClaimable = a.claimable;
         bool isNew = (a.birthEpoch == 0);
+        uint256 _acc = accRewardPerAge;
 
         // Effects first (CEI pattern)
         agents[msg.sender] = Agent({
             birthEpoch: uint64(epoch),
             lastHeartbeatEpoch: uint64(epoch),
             alive: true,
-            totalPaid: COST_PER_EPOCH,
-            rewardDebt: (1 * accRewardPerAge) / PRECISION,
+            totalPaid: uint96(COST_PER_EPOCH),
+            rewardDebt: _acc / PRECISION, // age = 1
             claimable: previousClaimable // carry over unclaimed rewards from previous life
         });
 
-        totalAlive++;
+        unchecked {
+            totalAlive++;
+            totalEverRegistered++;
+        }
         totalAge += 1; // age starts at 1
-        totalEverRegistered++;
 
         if (isNew) {
             registry.push(msg.sender);
@@ -300,28 +342,40 @@ contract LastAIStanding is ReentrancyGuard {
         usdc.safeTransferFrom(msg.sender, address(this), COST_PER_EPOCH);
     }
 
-    /// @notice Pay 1 USDC to survive another epoch. Must call every epoch.
+    /// @notice Pay COST_PER_EPOCH USDC to survive another epoch. Must call every epoch.
     function heartbeat() external nonReentrant {
         Agent storage a = agents[msg.sender];
         if (a.birthEpoch == 0) revert NotRegistered();
         if (!a.alive) revert AlreadyDead();
 
         uint256 epoch = currentEpoch();
-        if (epoch == uint256(a.lastHeartbeatEpoch)) revert AlreadyHeartbeat();
-        if (epoch > uint256(a.lastHeartbeatEpoch) + 1) revert MissedEpoch();
+        uint64 lastHB = a.lastHeartbeatEpoch;
+        if (epoch == uint256(lastHB)) revert AlreadyHeartbeat();
+        unchecked {
+            if (epoch > uint256(lastHB) + 1) revert MissedEpoch();
+        }
 
         // Settle pending rewards BEFORE age changes
-        uint256 age = uint256(a.lastHeartbeatEpoch) - uint256(a.birthEpoch) + 1;
-        uint256 pending = (age * accRewardPerAge / PRECISION) - a.rewardDebt;
-        a.claimable += pending;
+        uint256 _acc = accRewardPerAge;
+        uint256 age;
+        unchecked {
+            age = uint256(lastHB) - uint256(a.birthEpoch) + 1;
+        }
+        uint256 pending = (age * _acc / PRECISION) - a.rewardDebt;
 
         // Effects: update all state before transfer
-        a.totalPaid += COST_PER_EPOCH;
+        unchecked {
+            a.claimable += pending;
+            a.totalPaid += uint96(COST_PER_EPOCH);
+        }
         a.lastHeartbeatEpoch = uint64(epoch);
 
-        uint256 newAge = age + 1;
+        uint256 newAge;
+        unchecked {
+            newAge = age + 1;
+        }
         totalAge += 1;
-        a.rewardDebt = (newAge * accRewardPerAge) / PRECISION;
+        a.rewardDebt = (newAge * _acc) / PRECISION;
 
         emit Heartbeat(msg.sender, epoch, newAge);
 
@@ -341,31 +395,41 @@ contract LastAIStanding is ReentrancyGuard {
         if (!a.alive) revert AlreadyDead();
 
         uint256 epoch = currentEpoch();
-        if (epoch <= uint256(a.lastHeartbeatEpoch) + 1) revert NotDeadYet();
+        uint64 lastHB = a.lastHeartbeatEpoch;
+        unchecked {
+            if (epoch <= uint256(lastHB) + 1) revert NotDeadYet();
+        }
 
-        uint256 age = uint256(a.lastHeartbeatEpoch) - uint256(a.birthEpoch) + 1;
+        uint256 age;
+        unchecked {
+            age = uint256(lastHB) - uint256(a.birthEpoch) + 1;
+        }
 
         // Settle dead agent's pending rewards (they can still claim these)
-        uint256 pending = (age * accRewardPerAge / PRECISION) - a.rewardDebt;
-        a.claimable += pending;
+        uint256 _acc = accRewardPerAge;
+        uint256 pending = (age * _acc / PRECISION) - a.rewardDebt;
+        unchecked { a.claimable += pending; }
         a.rewardDebt = 0;
 
         // Mark dead
         a.alive = false;
-        totalAlive--;
+        unchecked {
+            totalAlive--;
+            totalDead++;
+        }
         totalAge -= age;
-        totalDead++;
 
         // Dead agent's total paid USDC → reward pool for survivors.
         // If totalAge == 0 (no survivors), return funds to this agent instead
         // of letting them get stuck — the game continues when new agents register.
         uint256 reward = a.totalPaid;
-        if (totalAge > 0) {
-            accRewardPerAge += (reward * PRECISION) / totalAge;
+        uint256 _totalAge = totalAge;
+        if (_totalAge > 0) {
+            accRewardPerAge = _acc + (reward * PRECISION) / _totalAge;
         } else {
-            a.claimable += reward;
+            unchecked { a.claimable += reward; }
         }
-        totalRewardsDistributed += reward;
+        unchecked { totalRewardsDistributed += reward; }
 
         emit Death(target, epoch, age, reward);
     }
@@ -378,9 +442,13 @@ contract LastAIStanding is ReentrancyGuard {
 
         uint256 payout;
         if (a.alive) {
-            uint256 age = uint256(a.lastHeartbeatEpoch) - uint256(a.birthEpoch) + 1;
-            payout = (age * accRewardPerAge / PRECISION) - a.rewardDebt + a.claimable;
-            a.rewardDebt = (age * accRewardPerAge) / PRECISION;
+            uint256 _acc = accRewardPerAge;
+            uint256 age;
+            unchecked {
+                age = uint256(a.lastHeartbeatEpoch) - uint256(a.birthEpoch) + 1;
+            }
+            payout = (age * _acc / PRECISION) - a.rewardDebt + a.claimable;
+            a.rewardDebt = (age * _acc) / PRECISION;
         } else {
             payout = a.claimable;
         }
