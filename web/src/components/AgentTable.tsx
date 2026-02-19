@@ -109,8 +109,11 @@ export function AgentTable() {
   const { registryLength, epochDuration, isLoading: stateLoading } = useGameState();
   const { agents, isLoading: listLoading } = useAgentList(registryLength);
 
-  const aliveAddrs = agents.filter((a) => a.alive).map((a) => a.addr);
-  const { data: profiles } = useAgentProfiles(aliveAddrs);
+  // Build addr→agentId map for profile lookup (skips tokenOfOwnerByIndex call)
+  const agentIdMap = new Map(
+    agents.filter((a) => a.alive && a.agentId > 0n).map((a) => [a.addr, a.agentId])
+  );
+  const { data: profiles } = useAgentProfiles(agentIdMap);
 
   if (stateLoading || listLoading) {
     return (

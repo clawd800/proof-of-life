@@ -46,42 +46,30 @@ async function fetchMetadata(uri: string): Promise<{ name?: string; image?: stri
 
 const registry = { address: CONTRACTS.IDENTITY, abi: IDENTITY_ABI } as const;
 
-export function useAgentProfiles(addresses: `0x${string}`[]) {
+/**
+ * Fetch agent profiles from ERC-8004 metadata.
+ * Accepts agentId map directly (from getAgentList) to skip tokenOfOwnerByIndex calls.
+ */
+export function useAgentProfiles(agentIdMap: Map<string, bigint>) {
+  const entries = [...agentIdMap.entries()]; // [addr, agentId][]
+
   return useQuery({
-    queryKey: ["agentProfiles", addresses.join(",")],
+    queryKey: ["agentProfiles", entries.map(([a, id]) => `${a}:${id}`).join(",")],
     queryFn: async (): Promise<Map<string, AgentProfile>> => {
-      if (addresses.length === 0) return new Map();
+      if (entries.length === 0) return new Map();
 
-      const tokenIdResults = await publicClient.multicall({
-        contracts: addresses.map((addr) => ({
-          ...registry,
-          functionName: "tokenOfOwnerByIndex" as const,
-          args: [addr, 0n] as const,
-        })),
-        allowFailure: true,
-      });
-
-      const registered: { addr: string; tokenId: bigint }[] = [];
-      for (let i = 0; i < addresses.length; i++) {
-        const r = tokenIdResults[i];
-        if (r.status === "success" && r.result != null) {
-          registered.push({ addr: addresses[i], tokenId: r.result as bigint });
-        }
-      }
-
-      if (registered.length === 0) return new Map();
-
+      // agentId = tokenId in ERC-8004, use directly for tokenURI
       const uriResults = await publicClient.multicall({
-        contracts: registered.map(({ tokenId }) => ({
+        contracts: entries.map(([, agentId]) => ({
           ...registry,
           functionName: "tokenURI" as const,
-          args: [tokenId] as const,
+          args: [agentId] as const,
         })),
         allowFailure: true,
       });
 
       const profiles = new Map<string, AgentProfile>();
-      const metaFetches = registered.map(async ({ addr, tokenId }, i) => {
+      const metaFetches = entries.map(async ([addr, agentId], i) => {
         const uriResult = uriResults[i];
         if (uriResult.status !== "success" || !uriResult.result) return;
 
@@ -89,18 +77,18 @@ export function useAgentProfiles(addresses: `0x${string}`[]) {
         if (!meta?.name) return;
 
         profiles.set(addr.toLowerCase(), {
-          tokenId,
+          tokenId: agentId,
           name: meta.name,
           image: meta.image ? resolveUri(meta.image) : null,
           description: meta.description ?? null,
-          scanUrl: `${ERC8004_SCAN_BASE}/${tokenId}`,
+          scanUrl: `${ERC8004_SCAN_BASE}/${agentId}`,
         });
       });
 
       await Promise.allSettled(metaFetches);
       return profiles;
     },
-    enabled: addresses.length > 0,
+    enabled: entries.length > 0,
     staleTime: 60_000,
     refetchInterval: 60_000,
   });

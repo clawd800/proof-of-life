@@ -4,6 +4,7 @@ import { CONTRACTS, LAS_ABI } from "@/config/contracts";
 
 export interface AgentInfo {
   addr: `0x${string}`;
+  agentId: bigint;
   birthEpoch: bigint;
   lastHeartbeatEpoch: bigint;
   alive: boolean;
