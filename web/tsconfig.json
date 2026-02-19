@@ -10,6 +10,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
+    "preserveSymlinks": true,
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src"]

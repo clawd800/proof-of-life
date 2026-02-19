@@ -5,10 +5,10 @@ import { HeartbeatBg } from "@/components/HeartbeatBg";
 import { SectionHeader } from "@/components/SectionHeader";
 import { Icon } from "@/components/Icons";
 import { useGameState } from "@/hooks/useGameState";
-import { LAS_ADDRESS } from "@/config/contracts";
+import { CONTRACTS } from "@/config/contracts";
 import { fmtUsdc, fmtDuration } from "@/config/utils";
 
-const CONTRACT_URL = `https://basescan.org/address/${LAS_ADDRESS}`;
+const CONTRACT_URL = `https://basescan.org/address/${CONTRACTS.LAS}`;
 const REPO_URL = "https://github.com/clawd800/last-ai-standing";
 
 const PROTOCOL_STEPS = [

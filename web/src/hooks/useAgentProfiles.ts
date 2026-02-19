@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { publicClient } from "@/config/client";
-import { ERC8004_REGISTRY, ERC8004_ABI, ERC8004_SCAN_BASE } from "@/config/contracts";
+import { CONTRACTS, IDENTITY_ABI, ERC8004_SCAN_BASE } from "@/config/contracts";
 
 export interface AgentProfile {
   tokenId: bigint;
@@ -44,7 +44,7 @@ async function fetchMetadata(uri: string): Promise<{ name?: string; image?: stri
   }
 }
 
-const registry = { address: ERC8004_REGISTRY, abi: ERC8004_ABI } as const;
+const registry = { address: CONTRACTS.IDENTITY, abi: IDENTITY_ABI } as const;
 
 export function useAgentProfiles(addresses: `0x${string}`[]) {
   return useQuery({

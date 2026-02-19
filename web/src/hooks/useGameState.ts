@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { publicClient } from "@/config/client";
-import { LAS_ADDRESS, LAS_ABI } from "@/config/contracts";
+import { CONTRACTS, LAS_ABI } from "@/config/contracts";
 
-const contract = { address: LAS_ADDRESS, abi: LAS_ABI } as const;
+const contract = { address: CONTRACTS.LAS, abi: LAS_ABI } as const;
 
 const CALLS = [
   { ...contract, functionName: "totalAlive" },

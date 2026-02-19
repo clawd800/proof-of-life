@@ -24,7 +24,10 @@ import {
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json");
 
-const transport = fallback(BASE_RPC_ENDPOINTS.map(url => http(url)));
+const rpcEndpoints = process.env.RPC_URL
+  ? [process.env.RPC_URL, ...BASE_RPC_ENDPOINTS]
+  : [...BASE_RPC_ENDPOINTS];
+const transport = fallback(rpcEndpoints.map(url => http(url)));
 const pub = createPublicClient({ chain: base, transport });
 
 function getWallet() {

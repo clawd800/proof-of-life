@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { publicClient } from "@/config/client";
-import { LAS_ADDRESS, LAS_ABI } from "@/config/contracts";
+import { CONTRACTS, LAS_ABI } from "@/config/contracts";
 
 export interface AgentInfo {
   addr: `0x${string}`;
@@ -20,7 +20,7 @@ export function useAgentList(registryLength: bigint | undefined) {
     queryKey: ["agentList", registryLength?.toString()],
     queryFn: () =>
       publicClient.readContract({
-        address: LAS_ADDRESS,
+        address: CONTRACTS.LAS,
         abi: LAS_ABI,
         functionName: "getAgentList",
         args: [0n, registryLength! - 1n],
