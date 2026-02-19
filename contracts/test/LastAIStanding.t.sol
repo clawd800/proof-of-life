@@ -50,6 +50,8 @@ contract LastAIStandingTest is Test {
     uint256 daveId;
 
     uint256 constant USDC_1 = 1e6;
+    uint256 constant POOL_AMOUNT = USDC_1 * 9 / 10; // 900000 — 90% after treasury
+    uint256 constant TREASURY_FEE = USDC_1 / 10;    // 100000 — 10% treasury
     uint256 constant EPOCH = 1 hours;
 
     function setUp() public {
@@ -224,7 +226,7 @@ contract LastAIStandingTest is Test {
         pol.claim();
         uint256 reward = usdc.balanceOf(alice) - balBefore;
 
-        assertApproxEqAbs(reward, USDC_1, 1);
+        assertApproxEqAbs(reward, POOL_AMOUNT, 1);
     }
 
     function test_rewardDistribution_multipleAgents() public {
@@ -246,9 +248,9 @@ contract LastAIStandingTest is Test {
         uint256 aliceReward = pol.pendingReward(alice);
         uint256 bobReward = pol.pendingReward(bob);
 
-        assertApproxEqAbs(aliceReward, 500000, 1);
-        assertApproxEqAbs(bobReward, 500000, 1);
-        assertApproxEqAbs(aliceReward + bobReward, USDC_1, 2);
+        assertApproxEqAbs(aliceReward, 450000, 1);  // 900000 / 2
+        assertApproxEqAbs(bobReward, 450000, 1);    // 900000 / 2
+        assertApproxEqAbs(aliceReward + bobReward, POOL_AMOUNT, 2);
     }
 
     function test_rewardDistribution_ageWeighted() public {
@@ -276,9 +278,9 @@ contract LastAIStandingTest is Test {
         uint256 aliceReward = pol.pendingReward(alice);
         uint256 bobReward = pol.pendingReward(bob);
 
-        assertEq(aliceReward, 625000);
-        assertEq(bobReward, 375000);
-        assertEq(aliceReward + bobReward, USDC_1);
+        assertEq(aliceReward, 562500);  // 5/8 * 900000
+        assertEq(bobReward, 337500);   // 3/8 * 900000
+        assertEq(aliceReward + bobReward, POOL_AMOUNT);
     }
 
     function test_deadAgentCanClaimEarnedRewards() public {
@@ -355,7 +357,7 @@ contract LastAIStandingTest is Test {
         uint256 charlieClaimable = pol.pendingReward(charlie);
         assertApproxEqAbs(
             aliceReward + bobReward + daveClaimable + charlieClaimable,
-            4 * USDC_1,
+            4 * POOL_AMOUNT,
             4
         );
     }
@@ -409,12 +411,12 @@ contract LastAIStandingTest is Test {
 
         assertEq(pol.totalAlive(), 0);
         uint256 alicePending = pol.pendingReward(alice);
-        assertEq(alicePending, 4 * USDC_1, "Winner gets own totalPaid back");
+        assertEq(alicePending, 4 * POOL_AMOUNT, "Winner gets own totalPaid back");
 
         uint256 aliceBalBefore = usdc.balanceOf(alice);
         vm.prank(alice);
         pol.claim();
-        assertEq(usdc.balanceOf(alice) - aliceBalBefore, 4 * USDC_1);
+        assertEq(usdc.balanceOf(alice) - aliceBalBefore, 4 * POOL_AMOUNT);
     }
 
     function test_lastAgentStanding_twoAgentSimple() public {
@@ -442,7 +444,7 @@ contract LastAIStandingTest is Test {
         uint256 aliceBalBefore = usdc.balanceOf(alice);
         vm.prank(alice);
         pol.claim();
-        assertEq(usdc.balanceOf(alice) - aliceBalBefore, 3 * USDC_1);
+        assertEq(usdc.balanceOf(alice) - aliceBalBefore, 3 * POOL_AMOUNT);
     }
 
     function test_lastAgentStanding_simultaneousDeath() public {
@@ -460,14 +462,15 @@ contract LastAIStandingTest is Test {
         assertEq(pol.totalAlive(), 0);
 
         uint256 bobPending = pol.pendingReward(bob);
-        assertEq(bobPending, 2 * USDC_1);
+        assertEq(bobPending, 2 * POOL_AMOUNT);
 
         uint256 bobBalBefore = usdc.balanceOf(bob);
         vm.prank(bob);
         pol.claim();
-        assertEq(usdc.balanceOf(bob) - bobBalBefore, 2 * USDC_1);
+        assertEq(usdc.balanceOf(bob) - bobBalBefore, 2 * POOL_AMOUNT);
 
-        assertEq(usdc.balanceOf(address(pol)), 0);
+        // Only treasury fees remain in contract
+        assertEq(usdc.balanceOf(address(pol)), pol.treasuryBalance());
     }
 
     function test_lastAgentStanding_doesNotStealUnclaimedRewards() public {
@@ -995,7 +998,7 @@ contract LastAIStandingTest is Test {
         vm.prank(killer);
         pol.kill(charlie);
 
-        assertApproxEqAbs(pol.pendingReward(bob), USDC_1, 1);
+        assertApproxEqAbs(pol.pendingReward(bob), POOL_AMOUNT, 1);
     }
 
     function test_reregister_contractDrainsToZero() public {
@@ -1016,7 +1019,8 @@ contract LastAIStandingTest is Test {
         vm.prank(alice);
         pol.claim();
 
-        assertApproxEqAbs(usdc.balanceOf(address(pol)), 0, 2);
+        // Only treasury fees remain (3 payments × 100000 = 300000)
+        assertApproxEqAbs(usdc.balanceOf(address(pol)), pol.treasuryBalance(), 2);
     }
 
     // ─── ERC-8004 Identity Tests ─────────────────────────────────────────
@@ -1030,7 +1034,7 @@ contract LastAIStandingTest is Test {
         _advanceEpoch();
 
         vm.expectEmit(true, true, false, true);
-        emit LastAIStanding.Death(alice, aliceId, pol.currentEpoch(), 1, USDC_1);
+        emit LastAIStanding.Death(alice, aliceId, pol.currentEpoch(), 1, POOL_AMOUNT);
         vm.prank(killer);
         pol.kill(alice);
     }
@@ -1060,6 +1064,129 @@ contract LastAIStandingTest is Test {
         vm.expectRevert(LastAIStanding.NotAgentWallet.selector);
         vm.prank(eve);
         pol.register(999);
+    }
+
+    // ─── Treasury Tests ────────────────────────────────────────────────
+
+    function test_treasury_defaultsToDeployer() public view {
+        assertEq(pol.treasury(), address(this));
+    }
+
+    function test_treasury_accruesOnRegister() public {
+        assertEq(pol.treasuryBalance(), 0);
+        _register(alice, aliceId);
+        assertEq(pol.treasuryBalance(), TREASURY_FEE);
+    }
+
+    function test_treasury_accruesOnHeartbeat() public {
+        _register(alice, aliceId);
+        assertEq(pol.treasuryBalance(), TREASURY_FEE);
+
+        _advanceEpoch();
+        _heartbeat(alice);
+        assertEq(pol.treasuryBalance(), 2 * TREASURY_FEE);
+    }
+
+    function test_treasury_claim() public {
+        _register(alice, aliceId);
+        _advanceEpoch();
+        _heartbeat(alice);
+
+        uint256 expected = 2 * TREASURY_FEE;
+        assertEq(pol.treasuryBalance(), expected);
+
+        uint256 balBefore = usdc.balanceOf(address(this));
+        pol.claimTreasury();
+        assertEq(usdc.balanceOf(address(this)) - balBefore, expected);
+        assertEq(pol.treasuryBalance(), 0);
+    }
+
+    function test_treasury_claimEmptyReverts() public {
+        vm.expectRevert(LastAIStanding.NothingToClaim.selector);
+        pol.claimTreasury();
+    }
+
+    function test_treasury_claimNotTreasuryReverts() public {
+        _register(alice, aliceId);
+
+        vm.expectRevert(LastAIStanding.NotTreasury.selector);
+        vm.prank(alice);
+        pol.claimTreasury();
+    }
+
+    function test_treasury_transfer() public {
+        address newTreasury = makeAddr("newTreasury");
+
+        vm.expectEmit(true, true, false, false);
+        emit LastAIStanding.TreasuryTransferred(address(this), newTreasury);
+        pol.transferTreasury(newTreasury);
+
+        assertEq(pol.treasury(), newTreasury);
+    }
+
+    function test_treasury_transferNotTreasuryReverts() public {
+        vm.expectRevert(LastAIStanding.NotTreasury.selector);
+        vm.prank(alice);
+        pol.transferTreasury(alice);
+    }
+
+    function test_treasury_transferZeroAddressReverts() public {
+        vm.expectRevert(LastAIStanding.ZeroAddress.selector);
+        pol.transferTreasury(address(0));
+    }
+
+    function test_treasury_newWalletCanClaim() public {
+        _register(alice, aliceId);
+        address newTreasury = makeAddr("newTreasury");
+
+        pol.transferTreasury(newTreasury);
+
+        // Old treasury can't claim anymore
+        vm.expectRevert(LastAIStanding.NotTreasury.selector);
+        pol.claimTreasury();
+
+        // New treasury can claim
+        uint256 balBefore = usdc.balanceOf(newTreasury);
+        vm.prank(newTreasury);
+        pol.claimTreasury();
+        assertEq(usdc.balanceOf(newTreasury) - balBefore, TREASURY_FEE);
+    }
+
+    function test_treasury_accountingIntegrity() public {
+        // Full game lifecycle: verify pool + treasury = total USDC deposited
+        _register(alice, aliceId);
+        _register(bob, bobId);
+
+        _advanceEpoch();
+        _heartbeat(alice);
+
+        _advanceEpoch();
+        _heartbeat(alice);
+
+        // Total payments: 4 (alice: register + 2 HB, bob: register)
+        uint256 totalPayments = 4 * USDC_1;
+        assertEq(usdc.balanceOf(address(pol)), totalPayments);
+        assertEq(pol.treasuryBalance(), 4 * TREASURY_FEE);
+
+        // Kill bob, alice claims rewards, then alice dies
+        vm.prank(killer);
+        pol.kill(bob);
+        vm.prank(alice);
+        pol.claim();
+
+        _advanceEpoch();
+        _advanceEpoch();
+        vm.prank(killer);
+        pol.kill(alice);
+        vm.prank(alice);
+        pol.claim();
+
+        // Contract should only hold treasury fees
+        assertEq(usdc.balanceOf(address(pol)), pol.treasuryBalance());
+
+        // Claim treasury → contract should be empty
+        pol.claimTreasury();
+        assertApproxEqAbs(usdc.balanceOf(address(pol)), 0, 2);
     }
 
     function test_identity_constructorValidation() public {

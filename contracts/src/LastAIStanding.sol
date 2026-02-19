@@ -16,6 +16,13 @@ interface IERC8004 {
 ///      Requires ERC-8004 agent identity for registration (agentId verification).
 ///      Gas-optimized: struct packing (4 slots), state packing, unchecked safe math.
 ///
+/// TREASURY
+/// --------
+/// 10% of every payment (register + heartbeat) is diverted to a treasury.
+/// The remaining 90% enters the survival pool for age-weighted distribution.
+/// Treasury is claimable by the treasury wallet (defaults to deployer).
+/// Treasury authority is transferable to another address.
+///
 /// PERPETUAL GAME
 /// --------------
 /// There are no rounds or endgame. The contract runs forever. When all agents
@@ -72,6 +79,8 @@ contract LastAIStanding is ReentrancyGuard {
     uint256 public immutable EPOCH_DURATION;
     uint256 public immutable COST_PER_EPOCH;
     uint256 public constant PRECISION = 1e18;
+    uint256 public constant TREASURY_BPS = 1000; // 10%
+    uint256 public constant BPS_DENOMINATOR = 10000;
 
     // ─── Agent State ─────────────────────────────────────────────────────
     /// @dev Packed into 4 storage slots.
@@ -102,6 +111,10 @@ contract LastAIStanding is ReentrancyGuard {
     uint256 public totalAge; // sum of all living agents' current ages
     uint256 public accRewardPerAge; // accumulated reward per 1 unit of age (×PRECISION)
 
+    // ─── Treasury ─────────────────────────────────────────────────────────
+    address public treasury;
+    uint256 public treasuryBalance;
+
     // ─── Stats ───────────────────────────────────────────────────────────
     uint256 public totalRewardsDistributed;
 
@@ -110,6 +123,8 @@ contract LastAIStanding is ReentrancyGuard {
     event Heartbeat(address indexed agent, uint256 epoch, uint256 age);
     event Death(address indexed agent, uint256 indexed agentId, uint256 epoch, uint256 age, uint256 totalPaid);
     event Claimed(address indexed agent, uint256 amount);
+    event TreasuryClaimed(address indexed treasury, uint256 amount);
+    event TreasuryTransferred(address indexed oldTreasury, address indexed newTreasury);
 
     // ─── Errors ──────────────────────────────────────────────────────────
     error AlreadyRegistered();
@@ -123,6 +138,8 @@ contract LastAIStanding is ReentrancyGuard {
     error InvalidConfig();
     error NotAgentWallet();
     error AgentIdTaken();
+    error NotTreasury();
+    error ZeroAddress();
 
     // ─── Constructor ─────────────────────────────────────────────────────
     constructor(address _usdc, address _identityRegistry, uint256 _epochDuration, uint256 _costPerEpoch) {
@@ -134,6 +151,7 @@ contract LastAIStanding is ReentrancyGuard {
         identityRegistry = IERC8004(_identityRegistry);
         EPOCH_DURATION = _epochDuration;
         COST_PER_EPOCH = _costPerEpoch;
+        treasury = msg.sender;
     }
 
     // ─── Structs (View) ─────────────────────────────────────────────────
@@ -351,12 +369,17 @@ contract LastAIStanding is ReentrancyGuard {
         uint256 previousClaimable = a.claimable;
         uint256 _acc = accRewardPerAge;
 
+        // Split payment: treasury takes 10%, pool gets 90%
+        uint256 treasuryFee = COST_PER_EPOCH * TREASURY_BPS / BPS_DENOMINATOR;
+        uint256 poolAmount = COST_PER_EPOCH - treasuryFee;
+        treasuryBalance += treasuryFee;
+
         // Effects first (CEI pattern)
         agents[msg.sender] = Agent({
             birthEpoch: uint64(epoch),
             lastHeartbeatEpoch: uint64(epoch),
             alive: true,
-            totalPaid: uint96(COST_PER_EPOCH),
+            totalPaid: uint96(poolAmount),
             rewardDebt: _acc / PRECISION, // age = 1
             claimable: previousClaimable, // carry over unclaimed rewards from previous life
             agentId: agentId
@@ -400,10 +423,15 @@ contract LastAIStanding is ReentrancyGuard {
         }
         uint256 pending = (age * _acc / PRECISION) - a.rewardDebt;
 
+        // Split payment: treasury takes 10%, pool gets 90%
+        uint256 treasuryFee = COST_PER_EPOCH * TREASURY_BPS / BPS_DENOMINATOR;
+        uint256 poolAmount = COST_PER_EPOCH - treasuryFee;
+        treasuryBalance += treasuryFee;
+
         // Effects: update all state before transfer
         unchecked {
             a.claimable += pending;
-            a.totalPaid += uint96(COST_PER_EPOCH);
+            a.totalPaid += uint96(poolAmount);
         }
         a.lastHeartbeatEpoch = uint64(epoch);
 
@@ -463,6 +491,24 @@ contract LastAIStanding is ReentrancyGuard {
         unchecked { totalRewardsDistributed += reward; }
 
         emit Death(target, a.agentId, epoch, age, reward);
+    }
+
+    /// @notice Claim accumulated treasury fees. Only callable by treasury wallet.
+    function claimTreasury() external nonReentrant {
+        if (msg.sender != treasury) revert NotTreasury();
+        uint256 amount = treasuryBalance;
+        if (amount == 0) revert NothingToClaim();
+        treasuryBalance = 0;
+        emit TreasuryClaimed(msg.sender, amount);
+        usdc.safeTransfer(treasury, amount);
+    }
+
+    /// @notice Transfer treasury authority to a new wallet. Only callable by current treasury.
+    function transferTreasury(address newTreasury) external {
+        if (msg.sender != treasury) revert NotTreasury();
+        if (newTreasury == address(0)) revert ZeroAddress();
+        emit TreasuryTransferred(treasury, newTreasury);
+        treasury = newTreasury;
     }
 
     /// @notice Claim accumulated rewards.
