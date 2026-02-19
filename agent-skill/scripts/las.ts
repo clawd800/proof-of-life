@@ -11,8 +11,10 @@
  *   kill      — Kill all killable agents
  *   claim     — Claim accumulated rewards
  *   approve   — Approve USDC spending
+ *   identity  — Check or register ERC-8004 identity
  */
 
+import { execSync } from "child_process";
 import {
   createPublicClient,
   createWalletClient,
@@ -79,6 +81,9 @@ const ERC20_ABI = [
 
 const IDENTITY_ABI = [
   { type: "function", name: "getAgentWallet", inputs: [{ name: "agentId", type: "uint256" }], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "register", inputs: [{ name: "metadataURI", type: "string" }], outputs: [{ type: "uint256" }], stateMutability: "nonpayable" },
+  { type: "function", name: "getAgentId", inputs: [{ name: "wallet", type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "tokenURI", inputs: [{ name: "agentId", type: "uint256" }], outputs: [{ type: "string" }], stateMutability: "view" },
 ] as const;
 
 // ─── Clients ─────────────────────────────────────────────────────────
@@ -208,6 +213,59 @@ async function cmdApprove() {
   console.log(`Approved: ${tx}`);
 }
 
+async function cmdIdentity() {
+  const wallet = getWallet();
+  const addr = wallet.account.address;
+  const agentId = await pub.readContract({ address: IDENTITY, abi: IDENTITY_ABI, functionName: "getAgentId", args: [addr] });
+  if (agentId === 0n) {
+    console.log(`Not registered | wallet: ${short(addr)}`);
+    return;
+  }
+  const uri = await pub.readContract({ address: IDENTITY, abi: IDENTITY_ABI, functionName: "tokenURI", args: [agentId] });
+  console.log(`agentId: ${agentId} | wallet: ${short(addr)} | URI: ${uri}`);
+}
+
+async function cmdIdentityRegister(args: string[]) {
+  const wallet = getWallet();
+  const addr = wallet.account.address;
+
+  // Parse --name, --desc, --url from args
+  let name = "", desc = "", url = "";
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--name" && args[i + 1]) { name = args[++i]; }
+    else if (args[i] === "--desc" && args[i + 1]) { desc = args[++i]; }
+    else if (args[i] === "--url" && args[i + 1]) { url = args[++i]; }
+  }
+
+  let metadataURI: string;
+  if (url) {
+    metadataURI = url;
+  } else {
+    // Requires gh CLI for gist upload
+    try { execSync("which gh", { stdio: "ignore" }); } catch {
+      console.error("gh CLI required. Install: https://cli.github.com/ — or use --url <url>");
+      process.exit(1);
+    }
+    if (!name) { console.error("Error: --name required"); process.exit(1); }
+    if (!desc) { console.error("Error: --desc required"); process.exit(1); }
+
+    const agentJson = JSON.stringify({ name, description: desc, wallet: addr });
+    const gistOutput = execSync("gh gist create --public --filename agent.json -", {
+      input: agentJson,
+      encoding: "utf-8",
+    }).trim();
+    // Convert https://gist.github.com/user/abc123 → raw URL
+    metadataURI = gistOutput.replace("gist.github.com", "gist.githubusercontent.com") + "/raw/agent.json";
+  }
+
+  console.log(`Registering with URI: ${metadataURI}...`);
+  const tx = await wallet.writeContract({ address: IDENTITY, abi: IDENTITY_ABI, functionName: "register", args: [metadataURI] });
+  await pub.waitForTransactionReceipt({ hash: tx });
+
+  const agentId = await pub.readContract({ address: IDENTITY, abi: IDENTITY_ABI, functionName: "getAgentId", args: [addr] });
+  console.log(`✓ Registered! agentId: ${agentId} | URI: ${metadataURI}`);
+}
+
 // ─── Main ────────────────────────────────────────────────────────────
 
 const [cmd, ...args] = process.argv.slice(2);
@@ -220,6 +278,10 @@ switch (cmd) {
   case "kill": await cmdKill(args[0]); break;
   case "claim": await cmdClaim(); break;
   case "approve": await cmdApprove(); break;
+  case "identity":
+    if (args[0] === "register") { await cmdIdentityRegister(args.slice(1)); }
+    else { await cmdIdentity(); }
+    break;
   default:
     console.log(`Last AI Standing — Agent Script\n`);
     console.log(`Usage: npx tsx las.ts <command> [args]\n`);
@@ -230,6 +292,8 @@ switch (cmd) {
     console.log(`  heartbeat           Pay to survive`);
     console.log(`  kill [address]      Kill agent(s)`);
     console.log(`  claim               Claim rewards`);
-    console.log(`  approve             Approve USDC\n`);
+    console.log(`  approve             Approve USDC`);
+    console.log(`  identity            Check ERC-8004 identity`);
+    console.log(`  identity register   Register new identity\n`);
     console.log(`Env: BASE_PRIVATE_KEY (for write commands)`);
 }

@@ -12,11 +12,14 @@ const EPOCH_DURATION = 3600n;    // 1 hour
 const MOCK_WALLET = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const MOCK_PK = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const MOCK_TX = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+const MOCK_GIST_URL = "https://gist.github.com/testuser/abc123";
 
 // Track all writeContract calls for assertion
-let writeContractCalls: Array<{ functionName: string; args?: any[] }> = [];
+let writeContractCalls: Array<{ address?: string; functionName: string; args?: any[] }> = [];
 // Configurable mock state
 let mockState = defaultMockState();
+// Mock execSync behavior
+let mockExecSyncFn: ((cmd: string, opts?: any) => string) | null = null;
 
 function defaultMockState() {
   return {
@@ -45,6 +48,9 @@ function defaultMockState() {
       claimable: 50_000n,
       agentId: 42n,
     },
+    // ERC-8004 identity fields
+    identityAgentId: 0n,
+    identityTokenURI: "",
   };
 }
 
@@ -59,6 +65,8 @@ function mockReadContract({ address, functionName, args }: any): any {
   // Identity Registry
   if (address === "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432") {
     if (functionName === "getAgentWallet") return mockState.agentWallet;
+    if (functionName === "getAgentId") return mockState.identityAgentId;
+    if (functionName === "tokenURI") return mockState.identityTokenURI;
   }
   // LAS contract
   switch (functionName) {
@@ -87,7 +95,7 @@ function mockReadContract({ address, functionName, args }: any): any {
 // ─── Mock viem ───────────────────────────────────────────────────────
 
 const mockWriteContract = vi.fn(async (params: any) => {
-  writeContractCalls.push({ functionName: params.functionName, args: params.args ? [...params.args] : undefined });
+  writeContractCalls.push({ address: params.address, functionName: params.functionName, args: params.args ? [...params.args] : undefined });
   return MOCK_TX;
 });
 
@@ -114,6 +122,13 @@ vi.mock("viem/accounts", () => ({
 
 vi.mock("viem/chains", () => ({
   base: { id: 8453, name: "Base", network: "base", nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: ["https://base-rpc.publicnode.com"] } } },
+}));
+
+vi.mock("child_process", () => ({
+  execSync: vi.fn((cmd: string, opts?: any) => {
+    if (mockExecSyncFn) return mockExecSyncFn(cmd, opts);
+    throw new Error("execSync not mocked for this test");
+  }),
 }));
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -144,6 +159,12 @@ async function runCLI(args: string[]) {
   vi.doMock("viem/chains", () => ({
     base: { id: 8453, name: "Base" },
   }));
+  vi.doMock("child_process", () => ({
+    execSync: vi.fn((cmd: string, opts?: any) => {
+      if (mockExecSyncFn) return mockExecSyncFn(cmd, opts);
+      throw new Error("execSync not mocked for this test");
+    }),
+  }));
 
   await import("./las.ts");
 }
@@ -159,6 +180,7 @@ describe("Last AI Standing CLI", () => {
     mockState = defaultMockState();
     writeContractCalls = [];
     mockWriteContract.mockClear();
+    mockExecSyncFn = null;
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     exitSpy = vi.spyOn(process, "exit").mockImplementation((() => { throw new Error("EXIT"); }) as any);
@@ -367,6 +389,89 @@ describe("Last AI Standing CLI", () => {
       const fns = writeContractCalls.map(c => c.functionName);
       expect(fns[0]).toBe("approve");
       expect(fns[1]).toBe("heartbeat");
+    });
+  });
+
+  // ─── identity ─────────────────────────────────────────────────────
+
+  describe("identity", () => {
+    it("should show registered identity", async () => {
+      mockState.identityAgentId = 42n;
+      mockState.identityTokenURI = "https://example.com/agent.json";
+      await runCLI(["identity"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("agentId: 42");
+      expect(output).toContain("URI: https://example.com/agent.json");
+    });
+
+    it("should show not registered when agentId is 0", async () => {
+      mockState.identityAgentId = 0n;
+      await runCLI(["identity"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("Not registered");
+    });
+  });
+
+  // ─── identity register ──────────────────────────────────────────
+
+  describe("identity register", () => {
+    it("should register with --url", async () => {
+      mockState.identityAgentId = 99n; // returned after registration
+      await runCLI(["identity", "register", "--url", "https://example.com/agent.json"]);
+      const identityCalls = writeContractCalls.filter(c => c.address === "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432");
+      expect(identityCalls).toHaveLength(1);
+      expect(identityCalls[0].functionName).toBe("register");
+      expect(identityCalls[0].args![0]).toBe("https://example.com/agent.json");
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("✓ Registered!");
+      expect(output).toContain("agentId: 99");
+    });
+
+    it("should register with --name and --desc via gh gist", async () => {
+      mockState.identityAgentId = 77n;
+      mockExecSyncFn = (cmd: string) => {
+        if (cmd === "which gh") return "/usr/bin/gh\n";
+        if (cmd.includes("gh gist create")) return MOCK_GIST_URL + "\n";
+        throw new Error(`Unexpected command: ${cmd}`);
+      };
+      await runCLI(["identity", "register", "--name", "TestAgent", "--desc", "A test agent"]);
+      const identityCalls = writeContractCalls.filter(c => c.address === "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432");
+      expect(identityCalls).toHaveLength(1);
+      expect(identityCalls[0].args![0]).toContain("gist.githubusercontent.com");
+      expect(identityCalls[0].args![0]).toContain("/raw/agent.json");
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("✓ Registered!");
+      expect(output).toContain("agentId: 77");
+    });
+
+    it("should error when gh CLI is not available and no --url", async () => {
+      mockExecSyncFn = (cmd: string) => {
+        if (cmd === "which gh") throw new Error("not found");
+        throw new Error(`Unexpected command: ${cmd}`);
+      };
+      await expect(runCLI(["identity", "register", "--name", "X", "--desc", "Y"])).rejects.toThrow("EXIT");
+      const errOutput = consoleErrorSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(errOutput).toContain("gh CLI required");
+    });
+
+    it("should error when --name is missing without --url", async () => {
+      mockExecSyncFn = (cmd: string) => {
+        if (cmd === "which gh") return "/usr/bin/gh\n";
+        throw new Error(`Unexpected command: ${cmd}`);
+      };
+      await expect(runCLI(["identity", "register", "--desc", "Y"])).rejects.toThrow("EXIT");
+      const errOutput = consoleErrorSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(errOutput).toContain("--name required");
+    });
+
+    it("should error when --desc is missing without --url", async () => {
+      mockExecSyncFn = (cmd: string) => {
+        if (cmd === "which gh") return "/usr/bin/gh\n";
+        throw new Error(`Unexpected command: ${cmd}`);
+      };
+      await expect(runCLI(["identity", "register", "--name", "X"])).rejects.toThrow("EXIT");
+      const errOutput = consoleErrorSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(errOutput).toContain("--desc required");
     });
   });
 
