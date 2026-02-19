@@ -1,1 +1,61 @@
 @import "tailwindcss";
+
+@theme {
+  --color-surface: #0a0a0f;
+  --color-surface-raised: rgba(255, 255, 255, 0.03);
+  --color-surface-hover: rgba(255, 255, 255, 0.06);
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-bright: rgba(239, 68, 68, 0.2);
+  --color-accent: #ef4444;
+  --color-accent-glow: rgba(239, 68, 68, 0.15);
+  --color-alive: #22c55e;
+  --color-dead: #6b7280;
+  --color-killable: #f59e0b;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace;
+}
+
+@layer base {
+  body {
+    background: var(--color-surface);
+    font-family: "Inter", -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Glass card */
+.glass {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  backdrop-filter: blur(12px);
+}
+.glass-accent {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-bright);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 30px var(--color-accent-glow), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* Glow text */
+.text-glow {
+  text-shadow: 0 0 20px var(--color-accent-glow), 0 0 40px rgba(239, 68, 68, 0.08);
+}
+
+/* Pulsing dot */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.5); }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Scanline overlay */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+/* Progress bar glow */
+.progress-glow {
+  box-shadow: 0 0 8px var(--color-accent), 0 0 16px var(--color-accent-glow);
+}

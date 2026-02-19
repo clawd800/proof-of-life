@@ -20,27 +20,27 @@ export function TxStatus({ hash, isPending, isConfirming, isSuccess, error, onDo
   if (!isPending && !isConfirming && !isSuccess && !error) return null;
 
   return (
-    <div className="text-sm mt-2">
-      {isPending && <p className="text-yellow-400">⏳ Confirm in wallet…</p>}
+    <div className="text-xs font-mono mt-3 px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+      {isPending && <p className="text-killable">Confirm in wallet…</p>}
       {isConfirming && (
         <p className="text-blue-400">
-          ⛓ Confirming…{" "}
+          Confirming{" "}
           {hash && (
             <a
               href={`https://basescan.org/tx/${hash}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="underline"
+              className="underline underline-offset-2 hover:text-blue-300"
             >
-              View tx
+              {hash.slice(0, 10)}…
             </a>
           )}
         </p>
       )}
-      {isSuccess && <p className="text-emerald-400">✅ Confirmed!</p>}
+      {isSuccess && <p className="text-alive">Confirmed</p>}
       {error && (
-        <p className="text-red-400">
-          ❌ {error.message.includes("User rejected") ? "Transaction rejected" : error.message.slice(0, 100)}
+        <p className="text-accent">
+          {error.message.includes("User rejected") ? "Rejected by user" : error.message.slice(0, 80)}
         </p>
       )}
     </div>
