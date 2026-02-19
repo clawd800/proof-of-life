@@ -6,6 +6,7 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  fallback,
   formatUnits,
   formatEther,
   parseEther,
@@ -16,14 +17,15 @@ import {
 import { base } from "viem/chains";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import {
-  CONTRACTS, BASE_RPC, LAS_ABI, ERC20_ABI, IDENTITY_ABI,
+  CONTRACTS, BASE_RPC_ENDPOINTS, LAS_ABI, ERC20_ABI, IDENTITY_ABI,
   UNISWAP, QUOTER_ABI, SWAP_ROUTER_ABI,
 } from "./constants.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json");
 
-const pub = createPublicClient({ chain: base, transport: http(BASE_RPC) });
+const transport = fallback(BASE_RPC_ENDPOINTS.map(url => http(url)));
+const pub = createPublicClient({ chain: base, transport });
 
 function getWallet() {
   const key = process.env.BASE_PRIVATE_KEY;
@@ -33,7 +35,7 @@ function getWallet() {
   }
   const pk = (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`;
   const account = privateKeyToAccount(pk);
-  return createWalletClient({ account, chain: base, transport: http(BASE_RPC) });
+  return createWalletClient({ account, chain: base, transport });
 }
 
 function fmtUsdc(value: bigint): string {
@@ -705,4 +707,4 @@ program
     }
   });
 
-program.parse();
+await program.parseAsync();

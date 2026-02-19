@@ -1,5 +1,5 @@
 /**
- * Last AI Standing — Unit Tests
+ * Last AI Standing CLI — Unit Tests
  * Mocks viem at the module level to test all CLI commands.
  */
 
@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // ─── Mock State ──────────────────────────────────────────────────────
 
 const COST_PER_EPOCH = 100_000n; // 0.1 USDC (6 decimals)
-const EPOCH_DURATION = 3600n;    // 1 hour
+const EPOCH_DURATION = 600n;     // 10 minutes
 const MOCK_WALLET = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const MOCK_PK = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const MOCK_TX = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
@@ -26,6 +26,7 @@ function defaultMockState() {
     currentEpoch: 10n,
     totalAlive: 5n,
     totalDead: 2n,
+    totalEverRegistered: 7n,
     totalPool: 1_000_000n,
     totalRewardsDistributed: 500_000n,
     costPerEpoch: COST_PER_EPOCH,
@@ -35,6 +36,7 @@ function defaultMockState() {
     isKillable: false,
     age: 5n,
     pendingReward: 50_000n,
+    ethBalance: 1_000_000_000_000_000_000n, // 1 ETH
     usdcBalance: 10_000_000n, // 10 USDC
     usdcAllowance: 0n,       // no allowance by default (triggers auto-approve)
     agentWallet: MOCK_WALLET,
@@ -48,9 +50,22 @@ function defaultMockState() {
       claimable: 50_000n,
       agentId: 42n,
     },
+    agentList: [{
+      addr: MOCK_WALLET,
+      agentId: 42n,
+      birthEpoch: 5n,
+      lastHeartbeatEpoch: 10n,
+      alive: true,
+      killable: false,
+      age: 5n,
+      totalPaid: 500_000n,
+      pendingReward: 50_000n,
+    }],
     // ERC-8004 identity fields
     identityAgentId: 0n,
     identityTokenURI: "",
+    // Swap quote
+    quoteAmountOut: 2_500_000n, // ~2.5 USDC for quote mock
   };
 }
 
@@ -75,6 +90,7 @@ function mockReadContract({ address, functionName, args }: any): any {
     case "currentEpoch": return mockState.currentEpoch;
     case "totalAlive": return mockState.totalAlive;
     case "totalDead": return mockState.totalDead;
+    case "totalEverRegistered": return mockState.totalEverRegistered;
     case "totalPool": return mockState.totalPool;
     case "totalRewardsDistributed": return mockState.totalRewardsDistributed;
     case "registryLength": return mockState.registryLength;
@@ -87,9 +103,16 @@ function mockReadContract({ address, functionName, args }: any): any {
       return [a.birthEpoch, a.lastHeartbeatEpoch, a.alive, a.totalPaid, a.rewardDebt, a.claimable, a.agentId];
     }
     case "getKillable": return mockState.killableAddresses;
-    case "getAgentList": return [];
+    case "getAgentList": return mockState.agentList;
     default: return 0n;
   }
+}
+
+function mockSimulateContract({ functionName }: any) {
+  if (functionName === "quoteExactInputSingle") {
+    return { result: [mockState.quoteAmountOut, 0n, 0, 0n] };
+  }
+  return { result: 0n };
 }
 
 // ─── Mock viem ───────────────────────────────────────────────────────
@@ -104,20 +127,27 @@ const mockWalletClient = {
   writeContract: mockWriteContract,
 };
 
+function createMockPublicClient() {
+  return {
+    readContract: vi.fn(mockReadContract),
+    waitForTransactionReceipt: vi.fn(async () => ({ status: "success", gasUsed: 50000n })),
+    getBalance: vi.fn(async () => mockState.ethBalance),
+    simulateContract: vi.fn(mockSimulateContract),
+  };
+}
+
 vi.mock("viem", async () => {
   const actual = await vi.importActual<typeof import("viem")>("viem");
   return {
     ...actual,
-    createPublicClient: vi.fn(() => ({
-      readContract: vi.fn(mockReadContract),
-      waitForTransactionReceipt: vi.fn(async () => ({ status: "success" })),
-    })),
+    createPublicClient: vi.fn(() => createMockPublicClient()),
     createWalletClient: vi.fn(() => mockWalletClient),
   };
 });
 
 vi.mock("viem/accounts", () => ({
-  privateKeyToAccount: vi.fn((pk: string) => ({ address: MOCK_WALLET, signMessage: vi.fn(), signTransaction: vi.fn() })),
+  privateKeyToAccount: vi.fn(() => ({ address: MOCK_WALLET, signMessage: vi.fn(), signTransaction: vi.fn() })),
+  generatePrivateKey: vi.fn(() => MOCK_PK),
 }));
 
 vi.mock("viem/chains", () => ({
@@ -133,28 +163,22 @@ vi.mock("child_process", () => ({
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/** Run the CLI by dynamically importing las.ts with the given argv */
+/** Run the CLI by dynamically importing cli.ts with the given argv */
 async function runCLI(args: string[]) {
-  process.argv = ["node", "las.ts", ...args];
-  // Clear module cache to re-run the script
-  const modulePath = await vi.importActual<any>("path");
-  const resolved = modulePath.resolve(__dirname, "las.ts");
-  // Invalidate the module in vitest's cache
+  process.argv = ["node", "cli.ts", ...args];
   vi.resetModules();
   // Re-apply mocks after resetModules
   vi.doMock("viem", async () => {
     const actual = await vi.importActual<typeof import("viem")>("viem");
     return {
       ...actual,
-      createPublicClient: vi.fn(() => ({
-        readContract: vi.fn(mockReadContract),
-        waitForTransactionReceipt: vi.fn(async () => ({ status: "success" })),
-      })),
+      createPublicClient: vi.fn(() => createMockPublicClient()),
       createWalletClient: vi.fn(() => mockWalletClient),
     };
   });
   vi.doMock("viem/accounts", () => ({
     privateKeyToAccount: vi.fn(() => ({ address: MOCK_WALLET, signMessage: vi.fn(), signTransaction: vi.fn() })),
+    generatePrivateKey: vi.fn(() => MOCK_PK),
   }));
   vi.doMock("viem/chains", () => ({
     base: { id: 8453, name: "Base" },
@@ -166,7 +190,7 @@ async function runCLI(args: string[]) {
     }),
   }));
 
-  await import("./las.ts");
+  await import("../src/cli.ts");
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────
@@ -200,10 +224,30 @@ describe("Last AI Standing CLI", () => {
     it("should display game state", async () => {
       await runCLI(["status"]);
       const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
-      expect(output).toContain("Epoch #10");
-      expect(output).toContain("Alive: 5");
-      expect(output).toContain("Dead: 2");
+      expect(output).toMatch(/Epoch.*#10/);
+      expect(output).toMatch(/Alive.*5/);
+      expect(output).toMatch(/Dead.*2/);
       expect(output).toContain("Pool:");
+      expect(output).toContain("USDC");
+    });
+  });
+
+  // ─── agents ────────────────────────────────────────────────────────
+
+  describe("agents", () => {
+    it("should display agent list", async () => {
+      await runCLI(["agents"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("ARENA");
+      expect(output).toContain("ALIVE");
+      expect(output).toContain("42"); // agentId
+    });
+
+    it("should report no agents when registry is empty", async () => {
+      mockState.registryLength = 0n;
+      await runCLI(["agents"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("No agents");
     });
   });
 
@@ -229,6 +273,7 @@ describe("Last AI Standing CLI", () => {
 
     it("should show DEAD for dead agents", async () => {
       mockState.isAlive = false;
+      mockState.isKillable = false;
       mockState.age = 3n;
       mockState.agents = { ...mockState.agents, alive: false };
       await runCLI(["me"]);
@@ -249,7 +294,6 @@ describe("Last AI Standing CLI", () => {
     it("should register with valid agentId", async () => {
       mockState.usdcAllowance = 0n; // triggers auto-approve
       await runCLI(["register", "42"]);
-      // Should have auto-approved then registered
       const fns = writeContractCalls.map(c => c.functionName);
       expect(fns).toContain("approve");
       expect(fns).toContain("register");
@@ -258,7 +302,7 @@ describe("Last AI Standing CLI", () => {
     });
 
     it("should skip approval when allowance is sufficient", async () => {
-      mockState.usdcAllowance = 999_999_999n; // plenty
+      mockState.usdcAllowance = 999_999_999n;
       await runCLI(["register", "42"]);
       const fns = writeContractCalls.map(c => c.functionName);
       expect(fns).not.toContain("approve");
@@ -269,7 +313,7 @@ describe("Last AI Standing CLI", () => {
       mockState.agentWallet = "0x0000000000000000000000000000000000000001";
       await expect(runCLI(["register", "42"])).rejects.toThrow("EXIT");
       const errOutput = consoleErrorSpy.mock.calls.map(c => c.join(" ")).join("\n");
-      expect(errOutput).toContain("mismatch");
+      expect(errOutput).toContain("not your wallet");
     });
   });
 
@@ -361,7 +405,7 @@ describe("Last AI Standing CLI", () => {
       const fns = writeContractCalls.map(c => c.functionName);
       expect(fns).toContain("approve");
       const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
-      expect(output).toContain("Approved:");
+      expect(output).toContain("Approved!");
     });
   });
 
@@ -369,7 +413,7 @@ describe("Last AI Standing CLI", () => {
 
   describe("auto-approve flow", () => {
     it("should auto-approve when allowance < cost for register", async () => {
-      mockState.usdcAllowance = COST_PER_EPOCH - 1n; // just under
+      mockState.usdcAllowance = COST_PER_EPOCH - 1n;
       await runCLI(["register", "42"]);
       const fns = writeContractCalls.map(c => c.functionName);
       expect(fns[0]).toBe("approve");
@@ -377,7 +421,7 @@ describe("Last AI Standing CLI", () => {
     });
 
     it("should not auto-approve when allowance >= cost", async () => {
-      mockState.usdcAllowance = COST_PER_EPOCH; // exactly enough
+      mockState.usdcAllowance = COST_PER_EPOCH;
       await runCLI(["register", "42"]);
       const fns = writeContractCalls.map(c => c.functionName);
       expect(fns).not.toContain("approve");
@@ -416,14 +460,14 @@ describe("Last AI Standing CLI", () => {
 
   describe("identity register", () => {
     it("should register with --url", async () => {
-      mockState.identityAgentId = 99n; // returned after registration
+      mockState.identityAgentId = 99n;
       await runCLI(["identity", "register", "--url", "https://example.com/agent.json"]);
       const identityCalls = writeContractCalls.filter(c => c.address === "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432");
       expect(identityCalls).toHaveLength(1);
       expect(identityCalls[0].functionName).toBe("register");
       expect(identityCalls[0].args![0]).toBe("https://example.com/agent.json");
       const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
-      expect(output).toContain("✓ Registered!");
+      expect(output).toContain("Registered!");
       expect(output).toContain("agentId: 99");
     });
 
@@ -440,7 +484,7 @@ describe("Last AI Standing CLI", () => {
       expect(identityCalls[0].args![0]).toContain("gist.githubusercontent.com");
       expect(identityCalls[0].args![0]).toContain("/raw/agent.json");
       const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
-      expect(output).toContain("✓ Registered!");
+      expect(output).toContain("Registered!");
       expect(output).toContain("agentId: 77");
     });
 
@@ -475,21 +519,128 @@ describe("Last AI Standing CLI", () => {
     });
   });
 
+  // ─── wallet ──────────────────────────────────────────────────────
+
+  describe("wallet", () => {
+    it("should show wallet address", async () => {
+      await runCLI(["wallet"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain(MOCK_WALLET);
+    });
+  });
+
+  describe("wallet new", () => {
+    it("should generate and display a new wallet", async () => {
+      delete process.env.BASE_PRIVATE_KEY; // wallet new doesn't need existing key
+      await runCLI(["wallet", "new"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("SAVE THIS KEY SECURELY");
+      expect(output).toContain(MOCK_WALLET); // from privateKeyToAccount mock
+      expect(output).toContain(MOCK_PK);     // from generatePrivateKey mock
+    });
+  });
+
+  describe("wallet balance", () => {
+    it("should show ETH and USDC balances", async () => {
+      await runCLI(["wallet", "balance"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain(MOCK_WALLET);
+      expect(output).toContain("ETH:");
+      expect(output).toContain("USDC:");
+    });
+  });
+
+  // ─── swap ────────────────────────────────────────────────────────
+
+  describe("swap", () => {
+    it("should swap ETH to USDC", async () => {
+      await runCLI(["swap", "eth", "usdc", "0.01"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("Quote:");
+      expect(output).toContain("Swapped!");
+      const fns = writeContractCalls.map(c => c.functionName);
+      expect(fns).toContain("exactInputSingle");
+    });
+
+    it("should swap USDC to ETH with approve", async () => {
+      mockState.usdcAllowance = 0n;
+      await runCLI(["swap", "usdc", "eth", "5"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("Quote:");
+      expect(output).toContain("Swapped!");
+      const fns = writeContractCalls.map(c => c.functionName);
+      expect(fns).toContain("approve");
+      expect(fns).toContain("multicall");
+    });
+
+    it("should error for unsupported swap pair", async () => {
+      await expect(runCLI(["swap", "btc", "eth", "1"])).rejects.toThrow("EXIT");
+      const errOutput = consoleErrorSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(errOutput).toContain("Only ETH↔USDC");
+    });
+
+    it("should error when ETH balance is insufficient", async () => {
+      mockState.ethBalance = 0n;
+      await expect(runCLI(["swap", "eth", "usdc", "1"])).rejects.toThrow("EXIT");
+      const errOutput = consoleErrorSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(errOutput).toContain("Insufficient ETH");
+    });
+
+    it("should error when USDC balance is insufficient", async () => {
+      mockState.usdcBalance = 0n;
+      await expect(runCLI(["swap", "usdc", "eth", "100"])).rejects.toThrow("EXIT");
+      const errOutput = consoleErrorSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(errOutput).toContain("Insufficient USDC");
+    });
+  });
+
+  // ─── auto ────────────────────────────────────────────────────────
+
+  describe("auto", () => {
+    it("should run heartbeat + kill + claim when alive", async () => {
+      mockState.usdcAllowance = 999_999_999n; // skip approve
+      mockState.killableAddresses = ["0x0000000000000000000000000000000000000001"];
+      mockState.pendingReward = 50_000n;
+      await runCLI(["auto"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("♥"); // heartbeat
+      expect(output).toContain("☠"); // kill
+      expect(output).toContain("💰"); // claim
+      expect(output).toContain("alive="); // summary
+    });
+
+    it("should exit early when not alive", async () => {
+      mockState.isAlive = false;
+      mockState.isKillable = false;
+      await runCLI(["auto"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("Not alive");
+      // Should NOT have sent heartbeat
+      const fns = writeContractCalls.map(c => c.functionName);
+      expect(fns).not.toContain("heartbeat");
+    });
+
+    it("should handle AlreadyHeartbeat gracefully", async () => {
+      mockState.usdcAllowance = 999_999_999n;
+      mockState.killableAddresses = [];
+      mockState.pendingReward = 0n;
+      // Make heartbeat throw AlreadyHeartbeat
+      mockWriteContract.mockImplementationOnce(async (params: any) => {
+        if (params.functionName === "heartbeat") {
+          throw new Error("AlreadyHeartbeat");
+        }
+        writeContractCalls.push({ address: params.address, functionName: params.functionName });
+        return MOCK_TX;
+      });
+      await runCLI(["auto"]);
+      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
+      expect(output).toContain("already sent");
+    });
+  });
+
   // ─── error cases ─────────────────────────────────────────────────
 
   describe("error cases", () => {
-    it("should show usage for unknown command", async () => {
-      await runCLI(["unknown"]);
-      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
-      expect(output).toContain("Usage:");
-    });
-
-    it("should show usage for no command", async () => {
-      await runCLI([]);
-      const output = consoleSpy.mock.calls.map(c => c.join(" ")).join("\n");
-      expect(output).toContain("Usage:");
-    });
-
     it("should fail without BASE_PRIVATE_KEY for write commands", async () => {
       delete process.env.BASE_PRIVATE_KEY;
       for (const cmd of ["me", "heartbeat", "approve"]) {

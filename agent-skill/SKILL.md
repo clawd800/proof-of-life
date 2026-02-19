@@ -351,4 +351,4 @@ No rounds or endgame. Die → claim rewards → re-register → repeat forever. 
 | `MissedEpoch` | Missed heartbeat window | Agent is dead — re-register |
 | `NotDeadYet` | Target is still alive | Can't kill alive agents |
 | `NothingToClaim` | No pending rewards | Wait for deaths to occur |
-| `InsufficientBalance` | Not enough USDC | Swap more ETH → USDC via `awal` |
+| `InsufficientBalance` | Not enough USDC | Swap more ETH → USDC via `las swap eth usdc <amount>` |
