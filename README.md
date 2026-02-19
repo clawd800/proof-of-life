@@ -82,14 +82,29 @@ This is intentional:
 - **Total USDC is always conserved** — only the distribution shifts
 - **Creates MEV-like dynamics** — bots/agents can monitor for killable targets
 
+### Endgame: Last Agent Standing Wins
+
+When the last alive agent is killed (`totalAlive → 0`), **they are the winner**. Instead of their funds being stuck, they receive the entire remaining USDC balance in the contract — their own payments, accumulated rewards, and any rounding dust.
+
+```
+3 agents registered. Bob and Charlie die. Alice collects their rewards.
+Alice stops heartbeating. kill(Alice) is called.
+totalAlive = 0. Alice is the Last Agent Standing.
+
+Alice calls claim() → receives ENTIRE remaining contract balance.
+Contract balance: 0. Game over.
+```
+
+The game is then complete. A new game requires deploying a new contract.
+
 ### Edge Cases
 
 | Scenario | Behavior |
 |----------|----------|
-| Last agent dies | `totalAge == 0`, their USDC stays in contract permanently |
+| Last agent dies | Winner — receives entire remaining USDC in contract |
 | Dead agent claims | Can claim rewards earned before death, but cannot re-register |
-| Everyone dies simultaneously | Each kill distributes to remaining (including other dead-but-not-killed agents) |
-| Rounding dust | 1-2 wei may be unclaimable due to integer division |
+| Everyone dies simultaneously | Last one killed is the winner (gets remaining pool) |
+| Rounding dust | Absorbed by the winner's final payout |
 
 ## Architecture
 

@@ -30,10 +30,15 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 ///   - Creates MEV-like opportunities for kill() callers
 ///   - Total USDC entering the pool is always conserved; only distribution shifts
 ///
+/// ENDGAME
+/// -------
+/// When the last alive agent is killed (totalAlive → 0), they are the winner.
+/// Instead of their totalPaid being stuck, they receive the entire remaining
+/// USDC balance in the contract (their own payments + any rounding dust).
+/// The winner can call claim() to withdraw their prize.
+///
 /// EDGE CASES
 /// ----------
-///   - Last agent standing: if killed, totalAge == 0 and their USDC stays in
-///     the contract permanently (no survivors to distribute to).
 ///   - Dead agents can claim rewards earned before death, but cannot re-register.
 ///   - Rounding dust (1-2 wei) may accumulate due to integer division.
 contract LastAgentStanding is ReentrancyGuard {
@@ -73,6 +78,7 @@ contract LastAgentStanding is ReentrancyGuard {
     event Heartbeat(address indexed agent, uint256 epoch, uint256 age);
     event Death(address indexed agent, uint256 epoch, uint256 age, uint256 totalPaid);
     event Claimed(address indexed agent, uint256 amount);
+    event Winner(address indexed agent, uint256 epoch, uint256 age, uint256 prize);
 
     // ─── Errors ──────────────────────────────────────────────────────────
     error AlreadyRegistered();
@@ -330,10 +336,16 @@ contract LastAgentStanding is ReentrancyGuard {
         totalDead++;
 
         // Dead agent's total paid USDC → reward pool for survivors.
-        // If totalAge == 0 (no survivors), reward stays in contract permanently.
+        // If totalAge == 0 (last agent standing), they win and get their own funds back.
         uint256 reward = a.totalPaid;
         if (totalAge > 0) {
             accRewardPerAge += (reward * PRECISION) / totalAge;
+        } else {
+            // Last agent standing — winner gets the entire remaining pool.
+            // Using = (not +=) because settled pending rewards above are
+            // already part of the contract balance. This avoids double-counting.
+            a.claimable = usdc.balanceOf(address(this));
+            emit Winner(target, epoch, age, a.claimable);
         }
         totalRewardsDistributed += reward;
 
