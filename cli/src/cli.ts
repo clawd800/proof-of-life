@@ -388,8 +388,9 @@ identity
   .description("Register a new ERC-8004 agent identity")
   .option("--name <name>", "Agent name")
   .option("--desc <description>", "Agent description")
+  .option("--image <url>", "Agent avatar image URL")
   .option("--url <url>", "Metadata URL (skip gist upload)")
-  .action(async (opts: { name?: string; desc?: string; url?: string }) => {
+  .action(async (opts: { name?: string; desc?: string; image?: string; url?: string }) => {
     const wallet = getWallet();
     const addr = wallet.account.address;
 
@@ -410,7 +411,14 @@ identity
       if (!opts.name) { console.error("  Error: --name required"); process.exit(1); }
       if (!opts.desc) { console.error("  Error: --desc required"); process.exit(1); }
 
-      const agentJson = JSON.stringify({ name: opts.name, description: opts.desc, wallet: addr });
+      const metadata: Record<string, unknown> = {
+        type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+        name: opts.name,
+        description: opts.desc,
+        active: true,
+      };
+      if (opts.image) metadata.image = opts.image;
+      const agentJson = JSON.stringify(metadata, null, 2);
       const gistOutput = execSync("gh gist create --public --filename agent.json -", {
         input: agentJson,
         encoding: "utf-8",

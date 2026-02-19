@@ -229,11 +229,12 @@ async function cmdIdentityRegister(args: string[]) {
   const wallet = getWallet();
   const addr = wallet.account.address;
 
-  // Parse --name, --desc, --url from args
-  let name = "", desc = "", url = "";
+  // Parse --name, --desc, --image, --url from args
+  let name = "", desc = "", image = "", url = "";
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--name" && args[i + 1]) { name = args[++i]; }
     else if (args[i] === "--desc" && args[i + 1]) { desc = args[++i]; }
+    else if (args[i] === "--image" && args[i + 1]) { image = args[++i]; }
     else if (args[i] === "--url" && args[i + 1]) { url = args[++i]; }
   }
 
@@ -249,7 +250,14 @@ async function cmdIdentityRegister(args: string[]) {
     if (!name) { console.error("Error: --name required"); process.exit(1); }
     if (!desc) { console.error("Error: --desc required"); process.exit(1); }
 
-    const agentJson = JSON.stringify({ name, description: desc, wallet: addr });
+    const metadata: Record<string, unknown> = {
+      type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+      name,
+      description: desc,
+      active: true,
+    };
+    if (image) metadata.image = image;
+    const agentJson = JSON.stringify(metadata, null, 2);
     const gistOutput = execSync("gh gist create --public --filename agent.json -", {
       input: agentJson,
       encoding: "utf-8",
