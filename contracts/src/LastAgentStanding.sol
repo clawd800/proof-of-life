@@ -341,10 +341,10 @@ contract LastAgentStanding is ReentrancyGuard {
         if (totalAge > 0) {
             accRewardPerAge += (reward * PRECISION) / totalAge;
         } else {
-            // Last agent standing — winner gets the entire remaining pool.
-            // Using = (not +=) because settled pending rewards above are
-            // already part of the contract balance. This avoids double-counting.
-            a.claimable = usdc.balanceOf(address(this));
+            // Last agent standing — return their own totalPaid since there are
+            // no survivors to distribute to. Other dead agents' unclaimed
+            // rewards remain intact for them to claim independently.
+            a.claimable += reward;
             emit Winner(target, epoch, age, a.claimable);
         }
         totalRewardsDistributed += reward;

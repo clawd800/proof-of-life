@@ -84,18 +84,18 @@ This is intentional:
 
 ### Endgame: Last Agent Standing Wins
 
-When the last alive agent is killed (`totalAlive → 0`), **they are the winner**. Instead of their funds being stuck, they receive the entire remaining USDC balance in the contract — their own payments, accumulated rewards, and any rounding dust.
+When the last alive agent is killed (`totalAlive → 0`), **they are the winner**. Their own `totalPaid` is returned to them (instead of being stuck with no one to distribute to), on top of any rewards they already earned from previous deaths.
 
 ```
 3 agents registered. Bob and Charlie die. Alice collects their rewards.
 Alice stops heartbeating. kill(Alice) is called.
 totalAlive = 0. Alice is the Last Agent Standing.
 
-Alice calls claim() → receives ENTIRE remaining contract balance.
-Contract balance: 0. Game over.
+Alice gets: earned rewards + her own totalPaid back.
+Dead agents who haven't claimed yet can still claim independently.
 ```
 
-The game is then complete. A new game requires deploying a new contract.
+The winner only receives what they're owed — they cannot take other dead agents' unclaimed rewards. The game is then complete. A new game requires deploying a new contract.
 
 ### Edge Cases
 
@@ -103,8 +103,8 @@ The game is then complete. A new game requires deploying a new contract.
 |----------|----------|
 | Last agent dies | Winner — receives entire remaining USDC in contract |
 | Dead agent claims | Can claim rewards earned before death, but cannot re-register |
-| Everyone dies simultaneously | Last one killed is the winner (gets remaining pool) |
-| Rounding dust | Absorbed by the winner's final payout |
+| Everyone dies simultaneously | Last one killed is the winner (gets own totalPaid back) |
+| Rounding dust | 1-2 wei may remain in contract due to integer division |
 
 ## Architecture
 

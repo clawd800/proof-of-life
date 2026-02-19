@@ -366,7 +366,7 @@ contract LastAgentStandingTest is Test {
 
     // ─── Last Agent Standing (Winner) ───────────────────────────────────
 
-    function test_lastAgentStanding_winsEntirePool() public {
+    function test_lastAgentStanding_winsOwnFundsBack() public {
         _register(alice);
         _register(bob);
         _register(charlie);
@@ -386,9 +386,9 @@ contract LastAgentStandingTest is Test {
         _heartbeat(alice);
 
         vm.prank(killer);
-        pol.kill(bob); // Bob's 2 USDC → pool (Alice + Charlie absorb)
+        pol.kill(bob); // Bob's 2 USDC → pool
         vm.prank(killer);
-        pol.kill(charlie); // Charlie's 2 USDC → pool (Alice absorbs)
+        pol.kill(charlie); // Charlie's 2 USDC → pool
 
         // Alice claims rewards from Bob and Charlie dying
         vm.prank(alice);
@@ -398,26 +398,19 @@ contract LastAgentStandingTest is Test {
         _advanceEpoch();
         _advanceEpoch();
 
-        uint256 contractBalance = usdc.balanceOf(address(pol));
-        assertTrue(contractBalance > 0, "Contract should have USDC");
-
         vm.prank(killer);
         pol.kill(alice);
 
-        // Alice is the winner — she gets the entire remaining pool
+        // Alice gets her own totalPaid back (4 USDC: register + 3 heartbeats)
         assertEq(pol.totalAlive(), 0);
         uint256 alicePending = pol.pendingReward(alice);
-        assertEq(alicePending, contractBalance, "Winner gets entire pool");
+        assertEq(alicePending, 4 * USDC_1, "Winner gets own totalPaid back");
 
-        // Alice claims the prize
+        // Alice claims
         uint256 aliceBalBefore = usdc.balanceOf(alice);
         vm.prank(alice);
         pol.claim();
-        uint256 aliceReceived = usdc.balanceOf(alice) - aliceBalBefore;
-        assertEq(aliceReceived, contractBalance);
-
-        // Contract is now empty
-        assertEq(usdc.balanceOf(address(pol)), 0);
+        assertEq(usdc.balanceOf(alice) - aliceBalBefore, 4 * USDC_1);
     }
 
     function test_lastAgentStanding_twoAgentSimple() public {
@@ -443,16 +436,14 @@ contract LastAgentStandingTest is Test {
         _advanceEpoch();
         _advanceEpoch();
 
-        uint256 poolBefore = usdc.balanceOf(address(pol));
         vm.prank(killer);
         pol.kill(alice);
 
-        // Alice can claim entire remaining pool
+        // Alice gets her own totalPaid (3 USDC) back
         uint256 aliceBalBefore = usdc.balanceOf(alice);
         vm.prank(alice);
         pol.claim();
-        assertEq(usdc.balanceOf(alice) - aliceBalBefore, poolBefore);
-        assertEq(usdc.balanceOf(address(pol)), 0);
+        assertEq(usdc.balanceOf(alice) - aliceBalBefore, 3 * USDC_1);
     }
 
     function test_lastAgentStanding_simultaneousDeath() public {
@@ -467,19 +458,83 @@ contract LastAgentStandingTest is Test {
         pol.kill(alice); // Alice's 1 USDC → Bob (totalAge = 1)
 
         vm.prank(killer);
-        pol.kill(bob); // Bob is last → gets entire remaining pool
+        pol.kill(bob); // Bob is last → gets own totalPaid back
 
         assertEq(pol.totalAlive(), 0);
 
-        // Bob can claim everything (Alice's reward + own funds)
+        // Bob gets: Alice's reward (1 USDC via accRewardPerAge) + own totalPaid (1 USDC)
         uint256 bobPending = pol.pendingReward(bob);
-        assertEq(bobPending, usdc.balanceOf(address(pol)));
+        assertEq(bobPending, 2 * USDC_1);
 
         uint256 bobBalBefore = usdc.balanceOf(bob);
         vm.prank(bob);
         pol.claim();
+        assertEq(usdc.balanceOf(bob) - bobBalBefore, 2 * USDC_1);
+
+        // Contract should be empty (all 2 USDC claimed by Bob)
         assertEq(usdc.balanceOf(address(pol)), 0);
-        assertEq(usdc.balanceOf(bob) - bobBalBefore, bobPending);
+    }
+
+    function test_lastAgentStanding_doesNotStealUnclaimedRewards() public {
+        _register(alice);
+        _register(bob);
+        _register(charlie);
+
+        // Epoch 1: all heartbeat
+        _advanceEpoch();
+        _heartbeat(alice);
+        _heartbeat(bob);
+        _heartbeat(charlie);
+
+        // Epoch 2: Charlie misses
+        _advanceEpoch();
+        _heartbeat(alice);
+        _heartbeat(bob);
+
+        // Epoch 3: kill Charlie. His 2 USDC goes to Alice (age 3) and Bob (age 3)
+        _advanceEpoch();
+        _heartbeat(alice);
+        _heartbeat(bob);
+
+        vm.prank(killer);
+        pol.kill(charlie); // 2 USDC → Alice and Bob (1 each)
+
+        // Bob does NOT claim his 1 USDC reward
+
+        // Epoch 4: Bob misses
+        _advanceEpoch();
+        _heartbeat(alice);
+
+        // Epoch 5: kill Bob, then Alice dies too
+        _advanceEpoch();
+
+        vm.prank(killer);
+        pol.kill(bob); // Bob's 3 USDC → Alice (only survivor)
+
+        // Alice misses
+        _advanceEpoch();
+        vm.prank(killer);
+        pol.kill(alice); // Alice is last agent
+
+        // Bob should still be able to claim his unclaimed rewards
+        uint256 bobPending = pol.pendingReward(bob);
+        assertTrue(bobPending > 0, "Bob should have unclaimed rewards");
+
+        // Alice gets her own totalPaid back + earned rewards (NOT Bob's unclaimed)
+        uint256 alicePending = pol.pendingReward(alice);
+
+        // Both can claim independently
+        uint256 bobBalBefore = usdc.balanceOf(bob);
+        vm.prank(bob);
+        pol.claim();
+        uint256 bobReceived = usdc.balanceOf(bob) - bobBalBefore;
+        assertEq(bobReceived, bobPending);
+
+        uint256 aliceBalBefore = usdc.balanceOf(alice);
+        vm.prank(alice);
+        pol.claim();
+        uint256 aliceReceived = usdc.balanceOf(alice) - aliceBalBefore;
+        assertEq(aliceReceived, alicePending);
     }
 
     function test_lastAgentStanding_winnerEvent() public {
