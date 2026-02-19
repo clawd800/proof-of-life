@@ -12,13 +12,12 @@ export function EpochTimer() {
 
   if (!currentEpoch || !epochDuration) return null;
 
-  const ed = Number(epochDuration);
-  const epochEnd = (Number(currentEpoch) + 1) * ed;
-  const remaining = Math.max(0, epochEnd - now);
-  const minutes = Math.floor(remaining / 60);
-  const seconds = remaining % 60;
-  const progress = ((ed - remaining) / ed) * 100;
-  const isUrgent = remaining < ed * 0.2;
+  const duration = Number(epochDuration);
+  const remaining = Math.max(0, (Number(currentEpoch) + 1) * duration - now);
+  const progress = ((duration - remaining) / duration) * 100;
+  const isUrgent = remaining < duration * 0.2;
+  const mm = Math.floor(remaining / 60).toString().padStart(2, "0");
+  const ss = (remaining % 60).toString().padStart(2, "0");
 
   return (
     <div className="terminal-accent rounded p-4">
@@ -27,7 +26,7 @@ export function EpochTimer() {
           EPOCH #{currentEpoch.toString()}
         </div>
         <div className={`font-mono text-2xl font-bold tabular-nums tracking-wider ${isUrgent ? "text-dead text-glow" : "text-accent text-glow-dim"}`}>
-          {minutes.toString().padStart(2, "0")}:{seconds.toString().padStart(2, "0")}
+          {mm}:{ss}
           <span className="animate-blink text-accent/60">_</span>
         </div>
       </div>

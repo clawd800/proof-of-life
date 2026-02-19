@@ -2,30 +2,30 @@ import { useGameState } from "@/hooks/useGameState";
 import { useAgentList, type AgentInfo } from "@/hooks/useAgentList";
 import { shortAddr, fmtUsdc, fmtAge } from "@/config/utils";
 
+const STATUS = {
+  killable: { color: "text-killable", dot: "bg-killable animate-pulse", label: "KILLABLE", bold: true },
+  alive:    { color: "text-alive",    dot: "bg-alive",                  label: "ALIVE",    bold: false },
+  dead:     { color: "text-dead/60",  dot: "bg-dead/30",               label: "DEAD",     bold: false },
+} as const;
+
+type Status = keyof typeof STATUS;
+
+function getStatus(agent: AgentInfo): Status {
+  if (agent.killable) return "killable";
+  return agent.alive ? "alive" : "dead";
+}
+
 function StatusBadge({ agent }: { agent: AgentInfo }) {
-  if (agent.killable) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-killable text-[11px] font-bold tracking-wider">
-        <span className="w-1.5 h-1.5 rounded-full bg-killable animate-pulse" />
-        KILLABLE
-      </span>
-    );
-  }
-  if (agent.alive) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-alive text-[11px]">
-        <span className="w-1.5 h-1.5 rounded-full bg-alive" />
-        ALIVE
-      </span>
-    );
-  }
+  const s = STATUS[getStatus(agent)];
   return (
-    <span className="inline-flex items-center gap-1.5 text-dead/60 text-[11px]">
-      <span className="w-1.5 h-1.5 rounded-full bg-dead/30" />
-      DEAD
+    <span className={`inline-flex items-center gap-1.5 text-[11px] ${s.color} ${s.bold ? "font-bold tracking-wider" : ""}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+      {s.label}
     </span>
   );
 }
+
+const COLUMNS = ["AGENT", "STATUS", "AGE", "PAID", "REWARDS"] as const;
 
 function AgentRow({ agent, epochDuration }: { agent: AgentInfo; epochDuration: bigint }) {
   return (
@@ -84,7 +84,7 @@ export function AgentTable() {
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-accent/10">
-              {["AGENT", "STATUS", "AGE", "PAID", "REWARDS"].map((h) => (
+              {COLUMNS.map((h) => (
                 <th key={h} className="py-2.5 px-3 text-[9px] text-accent/25 uppercase tracking-[0.2em] font-normal">
                   {h}
                 </th>

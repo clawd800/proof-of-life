@@ -21,7 +21,7 @@ export function GameStats() {
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 6 }, (_, i) => (
           <div key={i} className="terminal rounded p-3 h-16 animate-pulse" />
         ))}
       </div>
@@ -34,10 +34,10 @@ export function GameStats() {
     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
       <Stat label="Alive" value={totalAlive?.toString() ?? "—"} glow />
       <Stat label="Dead" value={totalDead?.toString() ?? "—"} />
-      <Stat label="Pool" value={totalPool !== undefined ? `${fmtUsdc(totalPool)} USDC` : "—"} glow />
-      <Stat label="Distributed" value={totalRewardsDistributed !== undefined ? `${fmtUsdc(totalRewardsDistributed)} USDC` : "—"} />
+      <Stat label="Pool" value={fmtUsdc(totalPool, true)} glow />
+      <Stat label="Distributed" value={fmtUsdc(totalRewardsDistributed, true)} />
       <Stat label="Epoch" value={epochSecs ? fmtDuration(epochSecs) : "—"} />
-      <Stat label="Cost" value={costPerEpoch ? `${fmtUsdc(costPerEpoch)} USDC` : "—"} />
+      <Stat label="Cost" value={fmtUsdc(costPerEpoch, true)} />
     </div>
   );
 }
