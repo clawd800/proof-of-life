@@ -5,7 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/// @title LastAgentStanding — Darwinian survival protocol for AI agents
+/// @title LastAIStanding — Darwinian survival protocol for AI agents
 /// @notice Agents pay 1 USDC/epoch to stay alive. Dead agents' funds go to survivors.
 /// @dev Uses MasterChef-style reward accounting with age-weighted distribution.
 ///
@@ -48,7 +48,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 ///   - Dead agents can claim rewards earned before death, then re-register.
 ///   - Rounding dust (1-2 wei) may accumulate due to integer division.
 ///   - registryLength() = unique agents; totalEverRegistered = total registration events.
-contract LastAgentStanding is ReentrancyGuard {
+contract LastAIStanding is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ─── Constants ───────────────────────────────────────────────────────

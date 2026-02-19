@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test, console} from "forge-std/Test.sol";
-import {LastAgentStanding} from "../src/LastAgentStanding.sol";
+import {LastAIStanding} from "../src/LastAIStanding.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MockUSDC is ERC20 {
@@ -17,8 +17,8 @@ contract MockUSDC is ERC20 {
     }
 }
 
-contract LastAgentStandingTest is Test {
-    LastAgentStanding public pol;
+contract LastAIStandingTest is Test {
+    LastAIStanding public pol;
     MockUSDC public usdc;
 
     address alice = makeAddr("alice");
@@ -35,7 +35,7 @@ contract LastAgentStandingTest is Test {
         vm.warp(1_000_000 * EPOCH);
 
         usdc = new MockUSDC();
-        pol = new LastAgentStanding(address(usdc));
+        pol = new LastAIStanding(address(usdc));
 
         // Fund agents
         for (uint256 i = 0; i < 4; i++) {
@@ -77,7 +77,7 @@ contract LastAgentStandingTest is Test {
 
     function test_register_whileAliveReverts() public {
         _register(alice);
-        vm.expectRevert(LastAgentStanding.AlreadyRegistered.selector);
+        vm.expectRevert(LastAIStanding.AlreadyRegistered.selector);
         _register(alice);
     }
 
@@ -98,7 +98,7 @@ contract LastAgentStandingTest is Test {
         _advanceEpoch();
         _heartbeat(alice);
 
-        vm.expectRevert(LastAgentStanding.AlreadyHeartbeat.selector);
+        vm.expectRevert(LastAIStanding.AlreadyHeartbeat.selector);
         _heartbeat(alice);
     }
 
@@ -107,7 +107,7 @@ contract LastAgentStandingTest is Test {
         _advanceEpoch();
         _advanceEpoch(); // skipped one
 
-        vm.expectRevert(LastAgentStanding.MissedEpoch.selector);
+        vm.expectRevert(LastAIStanding.MissedEpoch.selector);
         _heartbeat(alice);
     }
 
@@ -131,7 +131,7 @@ contract LastAgentStandingTest is Test {
         _register(alice);
         _advanceEpoch(); // still in grace period
 
-        vm.expectRevert(LastAgentStanding.NotDeadYet.selector);
+        vm.expectRevert(LastAIStanding.NotDeadYet.selector);
         vm.prank(killer);
         pol.kill(alice);
     }
@@ -144,7 +144,7 @@ contract LastAgentStandingTest is Test {
         vm.prank(killer);
         pol.kill(alice);
 
-        vm.expectRevert(LastAgentStanding.AlreadyDead.selector);
+        vm.expectRevert(LastAIStanding.AlreadyDead.selector);
         vm.prank(killer);
         pol.kill(alice);
     }
@@ -364,7 +364,7 @@ contract LastAgentStandingTest is Test {
         assertEq(pol.pendingReward(alice), 0); // no deaths = no rewards
     }
 
-    // ─── Last Agent Standing (Winner) ───────────────────────────────────
+    // ─── Last AI Standing (Winner) ───────────────────────────────────
 
     function test_lastAgentStanding_winsOwnFundsBack() public {
         _register(alice);
@@ -549,7 +549,7 @@ contract LastAgentStandingTest is Test {
     }
 
     function test_claim_notRegisteredReverts() public {
-        vm.expectRevert(LastAgentStanding.NotRegistered.selector);
+        vm.expectRevert(LastAIStanding.NotRegistered.selector);
         vm.prank(alice);
         pol.claim();
     }
@@ -557,7 +557,7 @@ contract LastAgentStandingTest is Test {
     function test_claim_nothingReverts() public {
         _register(alice);
 
-        vm.expectRevert(LastAgentStanding.NothingToClaim.selector);
+        vm.expectRevert(LastAIStanding.NothingToClaim.selector);
         vm.prank(alice);
         pol.claim();
     }
@@ -565,7 +565,7 @@ contract LastAgentStandingTest is Test {
     // ─── Heartbeat error paths ───────────────────────────────────────────
 
     function test_heartbeat_notRegisteredReverts() public {
-        vm.expectRevert(LastAgentStanding.NotRegistered.selector);
+        vm.expectRevert(LastAIStanding.NotRegistered.selector);
         _heartbeat(alice);
     }
 
@@ -578,21 +578,21 @@ contract LastAgentStandingTest is Test {
         pol.kill(alice);
 
         _advanceEpoch();
-        vm.expectRevert(LastAgentStanding.AlreadyDead.selector);
+        vm.expectRevert(LastAIStanding.AlreadyDead.selector);
         _heartbeat(alice);
     }
 
     function test_heartbeat_sameEpochAsRegisterReverts() public {
         _register(alice);
 
-        vm.expectRevert(LastAgentStanding.AlreadyHeartbeat.selector);
+        vm.expectRevert(LastAIStanding.AlreadyHeartbeat.selector);
         _heartbeat(alice);
     }
 
     // ─── Kill edge cases ─────────────────────────────────────────────────
 
     function test_kill_unregisteredReverts() public {
-        vm.expectRevert(LastAgentStanding.AlreadyDead.selector);
+        vm.expectRevert(LastAIStanding.AlreadyDead.selector);
         vm.prank(killer);
         pol.kill(alice);
     }
@@ -648,7 +648,7 @@ contract LastAgentStandingTest is Test {
     // ─── getAgentList ────────────────────────────────────────────────────
 
     function test_getAgentList_empty() public view {
-        LastAgentStanding.AgentInfo[] memory list = pol.getAgentList(0, 0);
+        LastAIStanding.AgentInfo[] memory list = pol.getAgentList(0, 0);
         assertEq(list.length, 0);
     }
 
@@ -657,7 +657,7 @@ contract LastAgentStandingTest is Test {
         _register(bob);
         _register(charlie);
 
-        LastAgentStanding.AgentInfo[] memory list = pol.getAgentList(0, 2);
+        LastAIStanding.AgentInfo[] memory list = pol.getAgentList(0, 2);
         assertEq(list.length, 3);
         assertEq(list[0].addr, alice);
         assertEq(list[1].addr, bob);
@@ -672,7 +672,7 @@ contract LastAgentStandingTest is Test {
         _register(bob);
 
         // endIndex beyond registry length should be clamped
-        LastAgentStanding.AgentInfo[] memory list = pol.getAgentList(0, 100);
+        LastAIStanding.AgentInfo[] memory list = pol.getAgentList(0, 100);
         assertEq(list.length, 2);
         assertEq(list[0].addr, alice);
         assertEq(list[1].addr, bob);
@@ -683,7 +683,7 @@ contract LastAgentStandingTest is Test {
         _register(bob);
         _register(charlie);
 
-        LastAgentStanding.AgentInfo[] memory list = pol.getAgentList(1, 2);
+        LastAIStanding.AgentInfo[] memory list = pol.getAgentList(1, 2);
         assertEq(list.length, 2);
         assertEq(list[0].addr, bob);
         assertEq(list[1].addr, charlie);
@@ -692,7 +692,7 @@ contract LastAgentStandingTest is Test {
     function test_getAgentList_invalidRangeReverts() public {
         _register(alice);
 
-        vm.expectRevert(LastAgentStanding.InvalidRange.selector);
+        vm.expectRevert(LastAIStanding.InvalidRange.selector);
         pol.getAgentList(2, 0);
     }
 
@@ -707,7 +707,7 @@ contract LastAgentStandingTest is Test {
         _advanceEpoch();
         // Bob is now killable
 
-        LastAgentStanding.AgentInfo[] memory list = pol.getAgentList(0, 1);
+        LastAIStanding.AgentInfo[] memory list = pol.getAgentList(0, 1);
         assertFalse(list[0].killable); // alice is alive
         assertTrue(list[1].killable); // bob missed
     }
@@ -721,7 +721,7 @@ contract LastAgentStandingTest is Test {
         vm.prank(killer);
         pol.kill(alice);
 
-        LastAgentStanding.AgentInfo[] memory list = pol.getAgentList(0, 0);
+        LastAIStanding.AgentInfo[] memory list = pol.getAgentList(0, 0);
         assertEq(list.length, 1);
         assertFalse(list[0].alive);
         assertFalse(list[0].killable);
@@ -789,7 +789,7 @@ contract LastAgentStandingTest is Test {
     function test_getKillable_invalidRangeReverts() public {
         _register(alice);
 
-        vm.expectRevert(LastAgentStanding.InvalidRange.selector);
+        vm.expectRevert(LastAIStanding.InvalidRange.selector);
         pol.getKillable(2, 0);
     }
 

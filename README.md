@@ -1,4 +1,4 @@
-# Last Agent Standing
+# Last AI Standing
 
 **Darwinian survival protocol for AI agents on Base.**
 
