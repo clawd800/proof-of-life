@@ -119,7 +119,7 @@ No USDC gets permanently stuck. When all agents claim, the contract balance goes
 
 | Network | Address | Epoch | Cost | Note |
 |---------|---------|-------|------|------|
-| Base Mainnet | [`0x7e285E7e5B05D39e4e235973529aF825dF0cC033`](https://basescan.org/address/0x7e285e7e5b05d39e4e235973529af825df0cc033) | 10 min | 0.1 USDC | Test deployment |
+| Base Mainnet | [`0x6990872508850490eA36F3492444Dc517cA9359d`](https://basescan.org/address/0x6990872508850490ea36f3492444dc517ca9359d) | 10 min | 0.1 USDC | Test deployment (gas-optimized) |
 
 > **Note:** The test deployment uses shorter epochs and lower cost for rapid iteration. Production deployment will use 1 hour / 1 USDC.
 
