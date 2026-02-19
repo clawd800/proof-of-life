@@ -2,7 +2,13 @@
   "name": "last-ai-standing-skill-scripts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
   "dependencies": {
     "viem": "^2.46.2"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.5"
   }
 }
