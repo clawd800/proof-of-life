@@ -66,8 +66,31 @@ function shortAddr(addr: string): string {
 }
 
 const c = { address: CONTRACTS.LAS, abi: LAS_ABI } as const;
+const PAGE_SIZE = 100n; // pagination batch size for view calls
 
 // ─── Helpers ─────────────────────────────────────────────────────────
+
+/** Paginated fetch for getAgentList */
+async function fetchAllAgents(regLen: bigint) {
+  const results: any[] = [];
+  for (let start = 0n; start < regLen; start += PAGE_SIZE) {
+    const end = (start + PAGE_SIZE - 1n < regLen - 1n) ? start + PAGE_SIZE - 1n : regLen - 1n;
+    const batch = await pub.readContract({ ...c, functionName: "getAgentList", args: [start, end] });
+    results.push(...batch);
+  }
+  return results;
+}
+
+/** Paginated fetch for getKillable */
+async function fetchAllKillable(regLen: bigint) {
+  const results: `0x${string}`[] = [];
+  for (let start = 0n; start < regLen; start += PAGE_SIZE) {
+    const end = (start + PAGE_SIZE - 1n < regLen - 1n) ? start + PAGE_SIZE - 1n : regLen - 1n;
+    const batch = await pub.readContract({ ...c, functionName: "getKillable", args: [start, end] });
+    results.push(...batch);
+  }
+  return results;
+}
 
 /** Check USDC allowance and auto-approve if insufficient */
 async function ensureApproval(wallet: ReturnType<typeof getWallet>) {
@@ -150,11 +173,7 @@ program
       return;
     }
 
-    const agents = await pub.readContract({
-      ...c,
-      functionName: "getAgentList",
-      args: [0n, regLen - 1n],
-    });
+    const agents = await fetchAllAgents(regLen);
 
     console.log(`\n  ARENA — ${agents.length} agent(s)\n`);
     console.log(`  ${"AGENT".padEnd(14)} ${"ID".padEnd(8)} ${"STATUS".padEnd(10)} ${"AGE".padEnd(8)} ${"PAID".padEnd(12)} REWARDS`);
@@ -293,11 +312,7 @@ program
         console.log("  No agents to kill.\n");
         return;
       }
-      const killable = await pub.readContract({
-        ...c,
-        functionName: "getKillable",
-        args: [0n, regLen - 1n],
-      });
+      const killable = await fetchAllKillable(regLen);
       if (killable.length === 0) {
         console.log("  No killable agents.\n");
         return;
@@ -499,7 +514,7 @@ program
     // 3. Kill — only if there are killable agents
     const regLen = await pub.readContract({ ...c, functionName: "registryLength" });
     if (regLen > 0n) {
-      const killable = await pub.readContract({ ...c, functionName: "getKillable", args: [0n, regLen - 1n] });
+      const killable = await fetchAllKillable(regLen);
       if (killable.length > 0) {
         for (const target of killable) {
           try {

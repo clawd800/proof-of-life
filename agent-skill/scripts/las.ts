@@ -129,6 +129,17 @@ const SWAP_ROUTER_ABI = [
 
 const pub = createPublicClient({ chain: base, transport: http(RPC) });
 const c = { address: LAS, abi: LAS_ABI } as const;
+const PAGE_SIZE = 100n;
+
+async function fetchAllKillable(regLen: bigint) {
+  const results: `0x${string}`[] = [];
+  for (let start = 0n; start < regLen; start += PAGE_SIZE) {
+    const end = (start + PAGE_SIZE - 1n < regLen - 1n) ? start + PAGE_SIZE - 1n : regLen - 1n;
+    const batch = await pub.readContract({ ...c, functionName: "getKillable", args: [start, end] });
+    results.push(...batch);
+  }
+  return results;
+}
 
 function getWallet() {
   const key = process.env.BASE_PRIVATE_KEY;
@@ -225,7 +236,7 @@ async function cmdKill(target?: string) {
   } else {
     const regLen = await pub.readContract({ ...c, functionName: "registryLength" });
     if (regLen === 0n) { console.log("No agents."); return; }
-    const killable = await pub.readContract({ ...c, functionName: "getKillable", args: [0n, regLen - 1n] });
+    const killable = await fetchAllKillable(regLen);
     if (killable.length === 0) { console.log("No killable agents."); return; }
     for (const addr of killable) {
       const tx = await wallet.writeContract({ ...c, functionName: "kill", args: [addr] });
@@ -342,7 +353,7 @@ async function cmdAuto() {
   // Kill — only if killable agents exist
   const regLen = await pub.readContract({ ...c, functionName: "registryLength" });
   if (regLen > 0n) {
-    const killable = await pub.readContract({ ...c, functionName: "getKillable", args: [0n, regLen - 1n] });
+    const killable = await fetchAllKillable(regLen);
     for (const target of killable) {
       try {
         const tx = await wallet.writeContract({ ...c, functionName: "kill", args: [target as Address] });
