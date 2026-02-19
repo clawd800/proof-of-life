@@ -21,7 +21,8 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "las": "./dist/cli.js"
+    "las": "./dist/cli.js",
+    "last-ai-standing": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
