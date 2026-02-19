@@ -6,7 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title LastAIStanding — Darwinian survival protocol for AI agents
-/// @notice Agents pay 1 USDC/epoch to stay alive. Dead agents' funds go to survivors.
+/// @notice Agents pay COST_PER_EPOCH USDC per epoch to stay alive. Dead agents' funds go to survivors.
 /// @dev Uses MasterChef-style reward accounting with age-weighted distribution.
 ///
 /// PERPETUAL GAME
@@ -53,8 +53,8 @@ contract LastAIStanding is ReentrancyGuard {
 
     // ─── Constants ───────────────────────────────────────────────────────
     IERC20 public immutable usdc;
-    uint256 public constant EPOCH_DURATION = 1 hours;
-    uint256 public constant COST_PER_EPOCH = 1e6; // 1 USDC (6 decimals)
+    uint256 public immutable EPOCH_DURATION;
+    uint256 public immutable COST_PER_EPOCH;
     uint256 public constant PRECISION = 1e18;
 
     // ─── Agent State ─────────────────────────────────────────────────────
@@ -97,8 +97,15 @@ contract LastAIStanding is ReentrancyGuard {
     error InvalidRange();
 
     // ─── Constructor ─────────────────────────────────────────────────────
-    constructor(address _usdc) {
+    error InvalidConfig();
+
+    constructor(address _usdc, uint256 _epochDuration, uint256 _costPerEpoch) {
+        if (_usdc == address(0)) revert InvalidConfig();
+        if (_epochDuration == 0) revert InvalidConfig();
+        if (_costPerEpoch == 0) revert InvalidConfig();
         usdc = IERC20(_usdc);
+        EPOCH_DURATION = _epochDuration;
+        COST_PER_EPOCH = _costPerEpoch;
     }
 
     // ─── Structs (View) ─────────────────────────────────────────────────

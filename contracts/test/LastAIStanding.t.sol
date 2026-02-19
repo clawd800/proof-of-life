@@ -35,7 +35,7 @@ contract LastAIStandingTest is Test {
         vm.warp(1_000_000 * EPOCH);
 
         usdc = new MockUSDC();
-        pol = new LastAIStanding(address(usdc));
+        pol = new LastAIStanding(address(usdc), 1 hours, 1e6);
 
         // Fund agents
         for (uint256 i = 0; i < 4; i++) {
