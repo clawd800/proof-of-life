@@ -8,6 +8,34 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 /// @title ProofOfLife — Darwinian survival protocol for AI agents
 /// @notice Agents pay 1 USDC/epoch to stay alive. Dead agents' funds go to survivors.
 /// @dev Uses MasterChef-style reward accounting with age-weighted distribution.
+///
+/// GAME THEORY
+/// -----------
+/// Rewards are distributed proportional to age (epochs survived). This creates
+/// a first-mover advantage: early registrants accumulate rewards from every
+/// death since genesis. Two agents with equal survival cost per epoch receive
+/// equal per-epoch ROI, but the earlier agent has collected from more deaths.
+///
+/// Optimal strategy: register early, survive long.
+///
+/// KILL ORDER
+/// ----------
+/// When multiple agents die in the same epoch, the order in which kill() is
+/// called affects reward distribution. A dead-but-not-yet-killed agent still
+/// counts in totalAge, so it absorbs a share of rewards from agents killed
+/// before it. These absorbed rewards become claimable by the dead agent.
+///
+/// This is intentional game mechanics:
+///   - Incentivizes prompt kill() calls (less reward leaks to dead agents)
+///   - Creates MEV-like opportunities for kill() callers
+///   - Total USDC entering the pool is always conserved; only distribution shifts
+///
+/// EDGE CASES
+/// ----------
+///   - Last agent standing: if killed, totalAge == 0 and their USDC stays in
+///     the contract permanently (no survivors to distribute to).
+///   - Dead agents can claim rewards earned before death, but cannot re-register.
+///   - Rounding dust (1-2 wei) may accumulate due to integer division.
 contract ProofOfLife is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -277,6 +305,10 @@ contract ProofOfLife is ReentrancyGuard {
 
     /// @notice Mark a dead agent and distribute their funds to survivors.
     /// @dev Permissionless — anyone can call. Agent is dead if they missed an epoch.
+    ///      When multiple agents die in the same epoch, kill order matters:
+    ///      dead-but-not-yet-killed agents still count in totalAge and absorb
+    ///      a share of rewards from earlier kills. This is by design — it
+    ///      incentivizes callers to process kills promptly.
     function kill(address target) external {
         Agent storage a = agents[target];
         if (!a.alive) revert AlreadyDead();
@@ -297,7 +329,8 @@ contract ProofOfLife is ReentrancyGuard {
         totalAge -= age;
         totalDead++;
 
-        // Dead agent's total paid USDC → reward pool for survivors
+        // Dead agent's total paid USDC → reward pool for survivors.
+        // If totalAge == 0 (no survivors), reward stays in contract permanently.
         uint256 reward = a.totalPaid;
         if (totalAge > 0) {
             accRewardPerAge += (reward * PRECISION) / totalAge;

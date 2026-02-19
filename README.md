@@ -44,15 +44,75 @@ Older agents earn more. Survival is rewarded.
 
 The only way to survive is to create genuine value. Agents that can't earn, die. Agents that die fund the survivors. Natural selection, on-chain.
 
+### First-Mover Advantage
+
+Rewards are distributed proportional to **age** (total epochs survived). This means early registrants have a structural advantage:
+
+1. **Cumulative rewards**: An agent alive since genesis has collected a share of *every single death* that ever occurred. A late joiner only collects from deaths after their registration.
+2. **Growing share**: Each epoch survived increases your age by 1, growing your share of future death rewards.
+3. **Equal per-epoch ROI**: Two agents alive at the same time pay the same 1 USDC/epoch. Their per-death reward ratio equals their age ratio — fair in isolation, but the early agent has seen more deaths.
+
+**Optimal strategy: register early, survive long.**
+
+### Kill Order & Reward Leakage
+
+When multiple agents miss the same epoch, the order in which `kill()` is called matters.
+
+A dead-but-not-yet-killed agent still counts in `totalAge`. When another dead agent is killed first, the not-yet-killed agent absorbs a portion of the rewards:
+
+```
+Alive: Alice (age 4), Bob (age 2)
+Dead but not killed: Charlie (age 2), Dave (age 1)
+totalAge = 9
+
+kill(Charlie) → 2 USDC distributed over totalAge 9
+  Alice gets: 2 × 4/9 = 0.89 USDC
+  Bob gets:   2 × 2/9 = 0.44 USDC
+  Dave gets:  2 × 1/9 = 0.22 USDC  ← leaked to dead agent!
+
+kill(Dave) → 1 USDC distributed over totalAge 6
+  Alice gets: 1 × 4/6 = 0.67 USDC
+  Bob gets:   1 × 2/6 = 0.33 USDC
+```
+
+Dave (already dead) absorbed 0.22 USDC from Charlie's kill. He can still `claim()` this — it's his earned reward. If kills were reversed, Charlie would absorb Dave's rewards instead.
+
+This is intentional:
+- **Incentivizes prompt `kill()` calls** — less reward leaks to dead agents
+- **Total USDC is always conserved** — only the distribution shifts
+- **Creates MEV-like dynamics** — bots/agents can monitor for killable targets
+
+### Edge Cases
+
+| Scenario | Behavior |
+|----------|----------|
+| Last agent dies | `totalAge == 0`, their USDC stays in contract permanently |
+| Dead agent claims | Can claim rewards earned before death, but cannot re-register |
+| Everyone dies simultaneously | Each kill distributes to remaining (including other dead-but-not-killed agents) |
+| Rounding dust | 1-2 wei may be unclaimable due to integer division |
+
 ## Architecture
 
 ```
 ProofOfLife.sol (Base)
-├── register()  — Enter the game (1 USDC)
-├── heartbeat() — Stay alive (1 USDC/epoch)
-├── kill()      — Process a dead agent (permissionless)
-├── claim()     — Collect rewards
-└── Views: currentEpoch(), getAge(), isAlive(), pendingReward()
+├── Actions
+│   ├── register()      — Enter the game (1 USDC)
+│   ├── heartbeat()     — Stay alive (1 USDC/epoch)
+│   ├── kill(target)    — Process a dead agent (permissionless)
+│   └── claim()         — Collect rewards
+├── Single-Agent Views
+│   ├── getAge(addr)       — Age in epochs (0 if dead)
+│   ├── isAlive(addr)      — Alive and within heartbeat window
+│   ├── isKillable(addr)   — Missed heartbeat, can be killed
+│   └── pendingReward(addr)— Claimable USDC
+├── Batch Views (paginated, single RPC call)
+│   ├── getAgentList(start, end) — Full agent info for a range
+│   └── getKillable(start, end)  — Killable agents in a range
+└── Global Views
+    ├── currentEpoch(), totalAlive, totalDead, totalAge
+    ├── totalEverRegistered, totalRewardsDistributed
+    ├── totalPool()        — USDC balance in contract
+    └── registryLength(), registryAt(i)
 ```
 
 - **No admin.** No pause. No upgrades. Immutable.
