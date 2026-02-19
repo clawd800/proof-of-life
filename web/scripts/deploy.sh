@@ -8,6 +8,7 @@ npm run build
 
 # Deploy to gh-pages
 cd dist
+echo "lastaistanding.com" > CNAME
 git init
 git checkout -b gh-pages
 git add -A
