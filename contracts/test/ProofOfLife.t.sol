@@ -408,4 +408,290 @@ contract ProofOfLifeTest is Test {
         vm.prank(alice);
         pol.claim();
     }
+
+    // ─── Heartbeat error paths ───────────────────────────────────────────
+
+    function test_heartbeat_notRegisteredReverts() public {
+        vm.expectRevert(ProofOfLife.NotRegistered.selector);
+        _heartbeat(alice);
+    }
+
+    function test_heartbeat_deadReverts() public {
+        _register(alice);
+        _advanceEpoch();
+        _advanceEpoch();
+
+        vm.prank(killer);
+        pol.kill(alice);
+
+        _advanceEpoch();
+        vm.expectRevert(ProofOfLife.AlreadyDead.selector);
+        _heartbeat(alice);
+    }
+
+    function test_heartbeat_sameEpochAsRegisterReverts() public {
+        _register(alice);
+
+        vm.expectRevert(ProofOfLife.AlreadyHeartbeat.selector);
+        _heartbeat(alice);
+    }
+
+    // ─── Kill edge cases ─────────────────────────────────────────────────
+
+    function test_kill_unregisteredReverts() public {
+        vm.expectRevert(ProofOfLife.AlreadyDead.selector);
+        vm.prank(killer);
+        pol.kill(alice);
+    }
+
+    // ─── View functions for unregistered ──────────────────────────────────
+
+    function test_getAge_unregistered() public view {
+        assertEq(pol.getAge(alice), 0);
+    }
+
+    function test_isAlive_unregistered() public view {
+        assertFalse(pol.isAlive(alice));
+    }
+
+    function test_isKillable_unregistered() public view {
+        assertFalse(pol.isKillable(alice));
+    }
+
+    function test_pendingReward_unregistered() public view {
+        assertEq(pol.pendingReward(alice), 0);
+    }
+
+    // ─── isKillable ──────────────────────────────────────────────────────
+
+    function test_isKillable() public {
+        _register(alice);
+        assertFalse(pol.isKillable(alice)); // just registered
+
+        _advanceEpoch();
+        assertFalse(pol.isKillable(alice)); // in grace period
+
+        _advanceEpoch();
+        assertTrue(pol.isKillable(alice)); // missed epoch
+
+        vm.prank(killer);
+        pol.kill(alice);
+        assertFalse(pol.isKillable(alice)); // already dead
+    }
+
+    // ─── totalPool ───────────────────────────────────────────────────────
+
+    function test_totalPool() public {
+        assertEq(pol.totalPool(), 0);
+
+        _register(alice);
+        assertEq(pol.totalPool(), USDC_1);
+
+        _advanceEpoch();
+        _heartbeat(alice);
+        assertEq(pol.totalPool(), 2 * USDC_1);
+    }
+
+    // ─── getAgentList ────────────────────────────────────────────────────
+
+    function test_getAgentList_empty() public view {
+        ProofOfLife.AgentInfo[] memory list = pol.getAgentList(0, 0);
+        assertEq(list.length, 0);
+    }
+
+    function test_getAgentList_basic() public {
+        _register(alice);
+        _register(bob);
+        _register(charlie);
+
+        ProofOfLife.AgentInfo[] memory list = pol.getAgentList(0, 2);
+        assertEq(list.length, 3);
+        assertEq(list[0].addr, alice);
+        assertEq(list[1].addr, bob);
+        assertEq(list[2].addr, charlie);
+        assertTrue(list[0].alive);
+        assertEq(list[0].age, 1);
+        assertFalse(list[0].killable);
+    }
+
+    function test_getAgentList_clampsEndIndex() public {
+        _register(alice);
+        _register(bob);
+
+        // endIndex beyond registry length should be clamped
+        ProofOfLife.AgentInfo[] memory list = pol.getAgentList(0, 100);
+        assertEq(list.length, 2);
+        assertEq(list[0].addr, alice);
+        assertEq(list[1].addr, bob);
+    }
+
+    function test_getAgentList_partial() public {
+        _register(alice);
+        _register(bob);
+        _register(charlie);
+
+        ProofOfLife.AgentInfo[] memory list = pol.getAgentList(1, 2);
+        assertEq(list.length, 2);
+        assertEq(list[0].addr, bob);
+        assertEq(list[1].addr, charlie);
+    }
+
+    function test_getAgentList_invalidRangeReverts() public {
+        _register(alice);
+
+        vm.expectRevert(ProofOfLife.InvalidRange.selector);
+        pol.getAgentList(2, 0);
+    }
+
+    function test_getAgentList_withKillable() public {
+        _register(alice);
+        _register(bob);
+
+        _advanceEpoch();
+        _heartbeat(alice);
+        // Bob misses
+
+        _advanceEpoch();
+        // Bob is now killable
+
+        ProofOfLife.AgentInfo[] memory list = pol.getAgentList(0, 1);
+        assertFalse(list[0].killable); // alice is alive
+        assertTrue(list[1].killable); // bob missed
+    }
+
+    function test_getAgentList_deadAgent() public {
+        _register(alice);
+
+        _advanceEpoch();
+        _advanceEpoch();
+
+        vm.prank(killer);
+        pol.kill(alice);
+
+        ProofOfLife.AgentInfo[] memory list = pol.getAgentList(0, 0);
+        assertEq(list.length, 1);
+        assertFalse(list[0].alive);
+        assertFalse(list[0].killable);
+        assertEq(list[0].age, 0);
+    }
+
+    // ─── getKillable ─────────────────────────────────────────────────────
+
+    function test_getKillable_none() public {
+        _register(alice);
+        _register(bob);
+
+        address[] memory k = pol.getKillable(0);
+        assertEq(k.length, 0);
+    }
+
+    function test_getKillable_some() public {
+        _register(alice);
+        _register(bob);
+        _register(charlie);
+
+        _advanceEpoch();
+        _heartbeat(alice); // alice survives
+
+        _advanceEpoch();
+        _heartbeat(alice); // bob and charlie missed
+
+        address[] memory k = pol.getKillable(0);
+        assertEq(k.length, 2);
+        assertEq(k[0], bob);
+        assertEq(k[1], charlie);
+    }
+
+    function test_getKillable_withLimit() public {
+        _register(alice);
+        _register(bob);
+        _register(charlie);
+
+        _advanceEpoch();
+        _advanceEpoch(); // all three missed (alice too)
+
+        address[] memory k = pol.getKillable(2);
+        assertEq(k.length, 2); // limited to 2
+    }
+
+    function test_getKillable_afterKill() public {
+        _register(alice);
+        _register(bob);
+
+        _advanceEpoch();
+        _advanceEpoch();
+
+        vm.prank(killer);
+        pol.kill(alice);
+
+        address[] memory k = pol.getKillable(0);
+        assertEq(k.length, 1);
+        assertEq(k[0], bob);
+    }
+
+    // ─── Multiple claims ─────────────────────────────────────────────────
+
+    function test_claim_multipleTimes() public {
+        _register(alice);
+        _register(bob);
+        _register(charlie);
+
+        // Epoch 1: all heartbeat
+        _advanceEpoch();
+        _heartbeat(alice);
+        _heartbeat(bob);
+        _heartbeat(charlie);
+
+        // Epoch 2: charlie dies
+        _advanceEpoch();
+        _heartbeat(alice);
+        _heartbeat(bob);
+
+        _advanceEpoch();
+        _heartbeat(alice);
+        _heartbeat(bob);
+
+        vm.prank(killer);
+        pol.kill(charlie);
+
+        // Alice claims first batch
+        uint256 reward1 = pol.pendingReward(alice);
+        assertTrue(reward1 > 0);
+        vm.prank(alice);
+        pol.claim();
+        assertEq(pol.pendingReward(alice), 0);
+
+        // Bob dies, Alice gets more rewards
+        _advanceEpoch();
+        _heartbeat(alice);
+        _advanceEpoch();
+        _heartbeat(alice);
+
+        vm.prank(killer);
+        pol.kill(bob);
+
+        // Alice claims second batch
+        uint256 reward2 = pol.pendingReward(alice);
+        assertTrue(reward2 > 0);
+        vm.prank(alice);
+        pol.claim();
+        assertEq(pol.pendingReward(alice), 0);
+    }
+
+    // ─── isAlive timing edge ─────────────────────────────────────────────
+
+    function test_isAlive_graceWindow() public {
+        _register(alice);
+        // Just registered at epoch N, isAlive = true
+        assertTrue(pol.isAlive(alice));
+
+        _advanceEpoch();
+        // Epoch N+1: still alive (grace window)
+        assertTrue(pol.isAlive(alice));
+
+        _advanceEpoch();
+        // Epoch N+2: dead (missed N+1)
+        assertFalse(pol.isAlive(alice));
+        assertTrue(pol.isKillable(alice));
+    }
 }

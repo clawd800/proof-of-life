@@ -53,10 +53,23 @@ contract ProofOfLife {
     error MissedEpoch();
     error NotDeadYet();
     error NothingToClaim();
+    error InvalidRange();
 
     // ─── Constructor ─────────────────────────────────────────────────────
     constructor(address _usdc) {
         usdc = IERC20(_usdc);
+    }
+
+    // ─── Structs (View) ─────────────────────────────────────────────────
+    struct AgentInfo {
+        address addr;
+        uint64 birthEpoch;
+        uint64 lastHeartbeatEpoch;
+        bool alive;
+        bool killable;
+        uint256 age;
+        uint256 totalPaid;
+        uint256 pendingReward;
     }
 
     // ─── Views ───────────────────────────────────────────────────────────
@@ -80,6 +93,13 @@ contract ProofOfLife {
         return currentEpoch() <= uint256(a.lastHeartbeatEpoch) + 1;
     }
 
+    /// @notice Whether agent can be killed (missed their heartbeat window)
+    function isKillable(address addr) public view returns (bool) {
+        Agent storage a = agents[addr];
+        if (!a.alive) return false;
+        return currentEpoch() > uint256(a.lastHeartbeatEpoch) + 1;
+    }
+
     /// @notice Pending claimable reward for an agent
     function pendingReward(address addr) public view returns (uint256) {
         Agent storage a = agents[addr];
@@ -87,6 +107,11 @@ contract ProofOfLife {
         if (!a.alive) return a.claimable;
         uint256 age = uint256(a.lastHeartbeatEpoch) - uint256(a.birthEpoch) + 1;
         return (age * accRewardPerAge / PRECISION) - a.rewardDebt + a.claimable;
+    }
+
+    /// @notice Total USDC held in the contract (survival pool)
+    function totalPool() external view returns (uint256) {
+        return usdc.balanceOf(address(this));
     }
 
     /// @notice Total number of agents ever registered
@@ -97,6 +122,85 @@ contract ProofOfLife {
     /// @notice Get agent address by index
     function registryAt(uint256 index) external view returns (address) {
         return registry[index];
+    }
+
+    /// @notice Get a batch of agents with full info in a single RPC call
+    /// @param startIndex The index of the first agent (inclusive)
+    /// @param endIndex The index of the last agent (inclusive)
+    /// @return agentList Array of AgentInfo structs
+    function getAgentList(
+        uint256 startIndex,
+        uint256 endIndex
+    ) external view returns (AgentInfo[] memory agentList) {
+        if (registry.length == 0) return new AgentInfo[](0);
+        if (startIndex > endIndex) revert InvalidRange();
+
+        if (endIndex >= registry.length) {
+            endIndex = registry.length - 1;
+        }
+
+        uint256 length = endIndex - startIndex + 1;
+        agentList = new AgentInfo[](length);
+        uint256 epoch = currentEpoch();
+
+        for (uint256 i = 0; i < length; i++) {
+            address addr = registry[startIndex + i];
+            Agent storage a = agents[addr];
+
+            bool alive_ = a.alive;
+            bool killable_ = alive_ && epoch > uint256(a.lastHeartbeatEpoch) + 1;
+            uint256 age_ = alive_
+                ? uint256(a.lastHeartbeatEpoch) - uint256(a.birthEpoch) + 1
+                : 0;
+
+            uint256 reward_;
+            if (a.birthEpoch == 0) {
+                reward_ = 0;
+            } else if (!alive_) {
+                reward_ = a.claimable;
+            } else {
+                reward_ = (age_ * accRewardPerAge / PRECISION) - a.rewardDebt + a.claimable;
+            }
+
+            agentList[i] = AgentInfo({
+                addr: addr,
+                birthEpoch: a.birthEpoch,
+                lastHeartbeatEpoch: a.lastHeartbeatEpoch,
+                alive: alive_,
+                killable: killable_,
+                age: age_,
+                totalPaid: a.totalPaid,
+                pendingReward: reward_
+            });
+        }
+    }
+
+    /// @notice Get all agents that can be killed right now
+    /// @param limit Max number of killable agents to return (0 = no limit)
+    /// @return killableList Array of addresses that can be killed
+    function getKillable(uint256 limit) external view returns (address[] memory) {
+        uint256 epoch = currentEpoch();
+        uint256 count = 0;
+
+        // First pass: count killable
+        for (uint256 i = 0; i < registry.length; i++) {
+            Agent storage a = agents[registry[i]];
+            if (a.alive && epoch > uint256(a.lastHeartbeatEpoch) + 1) {
+                count++;
+                if (limit > 0 && count >= limit) break;
+            }
+        }
+
+        // Second pass: populate array
+        address[] memory result = new address[](count);
+        uint256 idx = 0;
+        for (uint256 i = 0; i < registry.length && idx < count; i++) {
+            Agent storage a = agents[registry[i]];
+            if (a.alive && epoch > uint256(a.lastHeartbeatEpoch) + 1) {
+                result[idx++] = registry[i];
+            }
+        }
+        return result;
     }
 
     // ─── Actions ─────────────────────────────────────────────────────────
