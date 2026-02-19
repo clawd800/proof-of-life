@@ -1,6 +1,6 @@
 // Last AI Standing — Contract Constants
 
-export const BASE_RPC = "https://base-rpc.publicnode.com";
+export const BASE_RPC = process.env.RPC_URL || "https://base-rpc.publicnode.com";
 
 export const CONTRACTS = {
   /** LastAIStanding contract (Base mainnet) */
