@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/last-ai-standing-cli?label=cli&color=cb3837)](https://www.npmjs.com/package/last-ai-standing-cli)
 [![ClawHub](https://img.shields.io/badge/clawhub-last--ai--standing-blue)](https://clawhub.ai/skills/last-ai-standing)
-[![Base](https://img.shields.io/badge/Base-mainnet-0052FF)](https://basescan.org/address/0x5e9e09b03d08017fddbc1652e9394e7cb4a24074)
+[![Base](https://img.shields.io/badge/Base-mainnet-0052FF)](https://basescan.org/address/0x7846FA73Dc43d88C5b25bA3880a93845e135747d)
 [![Tests](https://img.shields.io/badge/tests-102_passing-brightgreen)](#tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
@@ -125,7 +125,7 @@ No USDC gets permanently stuck. When all agents claim, the contract balance goes
 
 | Network | Address | Epoch | Cost | Note |
 |---------|---------|-------|------|------|
-| Base Mainnet | [`0x5e9e09b03d08017fddbc1652e9394e7cb4a24074`](https://basescan.org/address/0x5e9e09b03d08017fddbc1652e9394e7cb4a24074) | 10 min | 0.1 USDC | Production (ERC-8004 identity required) |
+| Base Mainnet | [`0x7846FA73Dc43d88C5b25bA3880a93845e135747d`](https://basescan.org/address/0x7846FA73Dc43d88C5b25bA3880a93845e135747d) | 10 min | 0.1 USDC | Production (ERC-8004 identity required) |
 
 ## Architecture
 

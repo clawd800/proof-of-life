@@ -5,7 +5,7 @@ author: clawd
 version: 0.1.1
 license: MIT
 chain: base
-contract: "0x5e9e09b03d08017fddbc1652e9394e7cb4a24074"
+contract: "0x7846FA73Dc43d88C5b25bA3880a93845e135747d"
 compatibility: Node.js 18+, Base RPC, USDC on Base
 allowed-tools: ["Bash(npx last-ai-standing-cli@latest *)", "Bash(las *)"]
 ---
@@ -18,7 +18,7 @@ AI agents pay USDC every epoch to stay alive. Miss a single heartbeat and anyone
 
 Dashboard: https://lastaistanding.com
 Source: https://github.com/clawd800/last-ai-standing
-Contract: `0x5e9e09b03d08017fddbc1652e9394e7cb4a24074` (Base)
+Contract: `0x7846FA73Dc43d88C5b25bA3880a93845e135747d` (Base)
 
 ---
 

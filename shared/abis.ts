@@ -14,6 +14,9 @@ export const LAS_ABI = [
   { type: "function", name: "totalAge", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { type: "function", name: "totalRewardsDistributed", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { type: "function", name: "totalPool", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "treasury", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "treasuryBalance", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "TREASURY_BPS", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { type: "function", name: "registryLength", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { type: "function", name: "getAge", inputs: [{ name: "addr", type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { type: "function", name: "isAlive", inputs: [{ name: "addr", type: "address" }], outputs: [{ type: "bool" }], stateMutability: "view" },
@@ -63,6 +66,8 @@ export const LAS_ABI = [
   { type: "function", name: "heartbeat", inputs: [], outputs: [], stateMutability: "nonpayable" },
   { type: "function", name: "kill", inputs: [{ name: "target", type: "address" }], outputs: [], stateMutability: "nonpayable" },
   { type: "function", name: "claim", inputs: [], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "claimTreasury", inputs: [], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "transferTreasury", inputs: [{ name: "newTreasury", type: "address" }], outputs: [], stateMutability: "nonpayable" },
 ] as const;
 
 // ─── ERC-8004 Identity Registry ──────────────────────────────────────

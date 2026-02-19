@@ -1,8 +1,8 @@
 // Last AI Standing — Contract Addresses (single source of truth)
 
 export const CONTRACTS = {
-  /** LastAIStanding v3 (Base mainnet) */
-  LAS: "0x5e9e09b03d08017fddbc1652e9394e7cb4a24074" as const,
+  /** LastAIStanding v4 — treasury (Base mainnet) */
+  LAS: "0x7846FA73Dc43d88C5b25bA3880a93845e135747d" as const,
   /** USDC on Base */
   USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const,
   /** ERC-8004 Identity Registry (proxy) on Base */
