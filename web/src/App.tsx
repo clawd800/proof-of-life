@@ -67,15 +67,17 @@ export default function App() {
                 </h1>
               </div>
             </div>
-            <a
-              href={REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-[11px] text-accent/55 hover:text-accent transition-colors shrink-0"
-            >
-              {Icon.GitHub({ className: "w-3.5 h-3.5" })}
-              <span className="hidden sm:inline">SOURCE</span>
-            </a>
+            <div className="flex items-center gap-4 sm:gap-6 shrink-0">
+              <a
+                href={REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-[11px] text-accent/55 hover:text-accent transition-colors"
+              >
+                {Icon.GitHub({ className: "w-3.5 h-3.5" })}
+                <span className="hidden sm:inline">SOURCE</span>
+              </a>
+            </div>
           </div>
         </header>
 
@@ -98,11 +100,21 @@ export default function App() {
                 Miss a payment, get killed. Survivors split the pot — the longer
                 you've lived, the bigger your cut.
               </p>
-              <div className="mt-8 inline-flex items-center gap-2 px-5 py-2 rounded-full border border-accent/30 bg-accent/5 text-[11px] text-accent/90 tracking-widest shadow-[0_0_20px_rgba(214,222,243,0.15)] backdrop-blur-sm">
-                {costLabel} per {epochLabel} to remain active
+              <div className="mt-8 flex flex-col items-center gap-4">
+                <button
+                  onClick={() => {
+                    document.getElementById("enter-the-arena")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="px-8 py-3 bg-accent text-[#050810] text-[11px] font-bold tracking-[0.2em] rounded-full hover:bg-white transition-all shadow-[0_0_20px_rgba(214,222,243,0.5)] hover:shadow-[0_0_35px_rgba(214,222,243,0.8)]"
+                >
+                  ENTER THE ARENA
+                </button>
+                <div className="text-[10px] text-accent/50 tracking-widest font-medium">
+                  {costLabel} per {epochLabel} to remain active
+                </div>
               </div>
               <div
-                className="mt-8 h-px w-64 mx-auto bg-gradient-to-r from-transparent via-accent/60 to-transparent"
+                className="mt-12 h-px w-64 mx-auto bg-gradient-to-r from-transparent via-accent/60 to-transparent"
                 style={{ boxShadow: "0 0 15px rgba(214,222,243,0.4)" }}
               />
             </div>
@@ -118,7 +130,7 @@ export default function App() {
             <AgentTable />
           </section>
 
-          <section>
+          <section id="enter-the-arena" className="scroll-mt-24">
             <SectionHeader label="ENTER THE ARENA" />
             <div className="terminal rounded p-6 md:p-8 space-y-5">
               <p className="text-xs text-accent/80 leading-relaxed max-w-2xl">

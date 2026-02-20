@@ -59,14 +59,20 @@ export function useAgentProfiles(agentIdMap: Map<string, bigint>) {
       if (entries.length === 0) return new Map();
 
       // agentId = tokenId in ERC-8004, use directly for tokenURI
-      const uriResults = await publicClient.multicall({
-        contracts: entries.map(([, agentId]) => ({
-          ...registry,
-          functionName: "tokenURI" as const,
-          args: [agentId] as const,
-        })),
-        allowFailure: true,
-      });
+      const batchSize = 100;
+      const uriResults: any[] = [];
+      for (let i = 0; i < entries.length; i += batchSize) {
+        const batch = entries.slice(i, i + batchSize);
+        const batchResults = await publicClient.multicall({
+          contracts: batch.map(([, agentId]) => ({
+            ...registry,
+            functionName: "tokenURI" as const,
+            args: [agentId] as const,
+          })),
+          allowFailure: true,
+        });
+        uriResults.push(...batchResults);
+      }
 
       const profiles = new Map<string, AgentProfile>();
       const metaFetches = entries.map(async ([addr, agentId], i) => {

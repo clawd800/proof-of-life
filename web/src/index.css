@@ -21,6 +21,10 @@
     text-rendering: optimizeLegibility;
   }
 
+  a, button {
+    cursor: pointer;
+  }
+
   ::selection {
     background: rgba(140, 233, 255, 0.3);
     color: #fff;
