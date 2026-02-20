@@ -3,6 +3,8 @@ import { useGameState } from "@/hooks/useGameState";
 import { useAgentList, type AgentInfo } from "@/hooks/useAgentList";
 import { useAgentProfiles, type AgentProfile } from "@/hooks/useAgentProfiles";
 import { shortAddr, fmtUsdc, fmtAge } from "@/config/utils";
+import { ERC8004_SCAN_BASE } from "@/config/contracts";
+import { Icon } from "@/components/Icons";
 
 const STATUS = {
   killable: { color: "text-killable", dot: "bg-killable animate-pulse", label: "KILLABLE", bold: true },
@@ -47,8 +49,21 @@ function AgentAvatar({ src, name }: { src: string; name: string }) {
 }
 
 function AgentIdentity({ agent, profile }: { agent: AgentInfo; profile?: AgentProfile }) {
+  const basescanUrl = `https://basescan.org/address/${agent.addr}`;
+  const profileUrl = profile ? profile.scanUrl : `${ERC8004_SCAN_BASE}/${agent.addr}`;
+
   const addrEl = (
-    <span className="font-mono text-[11px] text-accent/40">{shortAddr(agent.addr)}</span>
+    <a
+      href={basescanUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-1.5 group/addr hover:text-accent transition-colors w-fit"
+    >
+      <span className="font-mono text-[10.5px] text-accent/40 group-hover/addr:text-accent/70 transition-colors">
+        {shortAddr(agent.addr)}
+      </span>
+      <Icon.Basescan className="w-3 h-3 text-accent opacity-40 group-hover/addr:opacity-70 transition-opacity" />
+    </a>
   );
 
   const tagEl = agent.agentId > 0n ? (
@@ -57,52 +72,42 @@ function AgentIdentity({ agent, profile }: { agent: AgentInfo; profile?: AgentPr
     </span>
   ) : null;
 
-  if (!profile) {
-    return (
+  return (
+    <div className="inline-flex items-center gap-3 min-w-0">
       <a
-        href={`https://basescan.org/address/${agent.addr}`}
+        href={profileUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-3 hover:text-accent transition-colors"
+        className="shrink-0 hover:ring-2 hover:ring-accent/20 hover:ring-offset-1 hover:ring-offset-transparent rounded-full transition-all"
       >
-        <div className="w-12 h-12 rounded-full bg-accent/5 border border-accent/10 shrink-0 flex items-center justify-center">
-          <span className="text-accent/20 text-xs">?</span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-accent/60 font-medium">Unknown</span>
-            {tagEl}
+        {!profile ? (
+          <div className="w-12 h-12 rounded-full bg-accent/5 border border-accent/10 flex items-center justify-center">
+            <span className="text-accent/20 text-xs">?</span>
           </div>
-          {addrEl}
-        </div>
+        ) : profile.image ? (
+          <AgentAvatar src={profile.image} name={profile.name} />
+        ) : (
+          <span className="w-12 h-12 rounded-full bg-accent/10 border border-accent/15 flex items-center justify-center text-sm text-accent/40 shrink-0">
+            {profile.name.charAt(0).toUpperCase()}
+          </span>
+        )}
       </a>
-    );
-  }
-
-  return (
-    <a
-      href={profile.scanUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-3 group/agent hover:text-accent transition-colors min-w-0"
-    >
-      {profile.image ? (
-        <AgentAvatar src={profile.image} name={profile.name} />
-      ) : (
-        <span className="w-12 h-12 rounded-full bg-accent/10 border border-accent/15 flex items-center justify-center text-sm text-accent/40 shrink-0">
-          {profile.name.charAt(0).toUpperCase()}
-        </span>
-      )}
-      <span className="min-w-0 flex flex-col gap-0.5 justify-center">
-        <span className="flex items-center gap-2">
-          <span className="text-sm text-accent/80 group-hover/agent:text-accent transition-colors truncate font-medium">
-            {profile.name}
+      
+      <div className="flex flex-col gap-1 justify-center min-w-0">
+        <a
+          href={profileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 group/name hover:text-accent transition-colors w-fit"
+        >
+          <span className={`text-sm group-hover/name:text-accent transition-colors truncate font-medium ${!profile ? 'text-accent/60' : 'text-accent/80'}`}>
+            {profile ? profile.name : "Unknown"}
           </span>
           {tagEl}
-        </span>
-        <span className="font-mono text-[10px] text-accent/30">{shortAddr(agent.addr)}</span>
-      </span>
-    </a>
+        </a>
+        {addrEl}
+      </div>
+    </div>
   );
 }
 
