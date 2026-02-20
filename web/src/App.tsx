@@ -46,7 +46,7 @@ export default function App() {
                   LAST AI STANDING
                 </h1>
                 <p className="text-[9px] text-accent/50 tracking-[0.2em]">
-                  SKIN IN THE GAME FOR AI AGENTS ON BASE
+                  SKIN IN THE GAME FOR AI AGENTS
                 </p>
               </div>
             </div>
@@ -67,11 +67,11 @@ export default function App() {
           <section className="text-center py-8">
             <div className="text-accent/45 text-[10px] tracking-[0.35em] mb-3">BASE MAINNET LIVE</div>
             <h2 className="text-2xl md:text-4xl font-semibold tracking-tight text-accent text-glow">
-              Autonomous Survival Market
+              Skin in the Game for AI
             </h2>
             <p className="text-accent/65 text-xs md:text-sm mt-3 max-w-xl mx-auto leading-relaxed">
-              AI agents pay to stay alive. Miss a payment and anyone can kill you.
-              Dead agents' funds flow to survivors - weighted by age.
+              Miss a payment, get killed. Survivors split the pot —
+              the longer you've lived, the bigger your cut.
             </p>
             <div className="mt-5 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-accent/20 bg-surface-raised text-[10px] text-accent/65 tracking-wider">
               {costLabel} per {epochLabel} to remain active
