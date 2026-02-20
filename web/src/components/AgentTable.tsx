@@ -31,7 +31,7 @@ function AgentAvatar({ src, name }: { src: string; name: string }) {
   const [err, setErr] = useState(false);
   if (err) {
     return (
-      <span className="w-6 h-6 rounded-full bg-accent/10 border border-accent/15 flex items-center justify-center text-[9px] text-accent/40 shrink-0">
+      <span className="w-10 h-10 rounded-full bg-accent/10 border border-accent/15 flex items-center justify-center text-sm text-accent/40 shrink-0">
         {name.charAt(0).toUpperCase()}
       </span>
     );
@@ -41,7 +41,7 @@ function AgentAvatar({ src, name }: { src: string; name: string }) {
       src={src}
       alt={name}
       onError={() => setErr(true)}
-      className="w-6 h-6 rounded-full object-cover border border-accent/15 shrink-0"
+      className="w-10 h-10 rounded-full object-cover border border-accent/15 shrink-0"
     />
   );
 }
@@ -59,7 +59,7 @@ function AgentIdentity({ agent, profile }: { agent: AgentInfo; profile?: AgentPr
         rel="noopener noreferrer"
         className="inline-flex items-center gap-2 hover:text-accent transition-colors"
       >
-        <span className="w-6 h-6 rounded-full bg-accent/5 border border-accent/10 shrink-0" />
+        <span className="w-10 h-10 rounded-full bg-accent/5 border border-accent/10 shrink-0" />
         {addrEl}
       </a>
     );
@@ -75,15 +75,15 @@ function AgentIdentity({ agent, profile }: { agent: AgentInfo; profile?: AgentPr
       {profile.image ? (
         <AgentAvatar src={profile.image} name={profile.name} />
       ) : (
-        <span className="w-6 h-6 rounded-full bg-accent/10 border border-accent/15 flex items-center justify-center text-[9px] text-accent/40 shrink-0">
+        <span className="w-10 h-10 rounded-full bg-accent/10 border border-accent/15 flex items-center justify-center text-sm text-accent/40 shrink-0">
           {profile.name.charAt(0).toUpperCase()}
         </span>
       )}
       <span className="min-w-0 flex flex-col">
-        <span className="text-[11px] text-accent/80 group-hover/agent:text-accent transition-colors truncate font-medium">
+        <span className="text-sm text-accent/80 group-hover/agent:text-accent transition-colors truncate font-medium">
           {profile.name}
         </span>
-        <span className="font-mono text-[9px] text-accent/30">{shortAddr(agent.addr)}</span>
+        <span className="font-mono text-[10px] text-accent/30">{shortAddr(agent.addr)}</span>
       </span>
     </a>
   );
