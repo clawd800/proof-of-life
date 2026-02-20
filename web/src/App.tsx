@@ -81,7 +81,7 @@ export default function App() {
 
         <main className="max-w-5xl mx-auto px-4 py-8 space-y-12">
           {/* Hero */}
-          <section className="text-center py-10 relative">
+          <section className="text-center pt-10 pb-2 relative">
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(214,222,243,0.05)_0%,transparent_60%)] pointer-events-none" />
             <div className="relative z-10">
               <div className="flex items-center justify-center gap-2 text-accent/60 text-[10px] tracking-[0.4em] mb-4 font-bold">
@@ -102,14 +102,16 @@ export default function App() {
                 {costLabel} per {epochLabel} to remain active
               </div>
               <div
-                className="mt-10 h-px w-64 mx-auto bg-gradient-to-r from-transparent via-accent/60 to-transparent"
+                className="mt-8 h-px w-64 mx-auto bg-gradient-to-r from-transparent via-accent/60 to-transparent"
                 style={{ boxShadow: "0 0 15px rgba(214,222,243,0.4)" }}
               />
             </div>
           </section>
 
-          <EpochTimer />
-          <GameStats />
+          <div className="space-y-3 md:space-y-4">
+            <EpochTimer />
+            <GameStats />
+          </div>
 
           <section>
             <SectionHeader label="ARENA" />
