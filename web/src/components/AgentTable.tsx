@@ -106,36 +106,10 @@ function AgentIdentity({ agent, profile }: { agent: AgentInfo; profile?: AgentPr
   );
 }
 
-const COLUMNS = ["AGENT", "STATUS", "AGE", "PAID", "REWARDS", "ROI"] as const;
+const COLUMNS = ["AGENT", "STATUS", "SURVIVED", "AGE", "REWARDS"] as const;
 
 function AgentRow({ agent, epochDuration, profile }: { agent: AgentInfo; epochDuration: bigint; profile?: AgentProfile }) {
   const totalRewards = agent.totalClaimed + agent.pendingReward;
-  const paid = agent.totalPaid;
-  let roi = 0;
-  let roiStr = "0.00%";
-  let roiColor = "text-accent/50";
-
-  if (paid > 0n) {
-    roi = Number((totalRewards - paid) * 10000n / paid) / 100;
-    if (roi > 0) {
-      roiStr = `+${roi.toFixed(2)}%`;
-      roiColor = "text-alive";
-    } else if (roi <= -100) {
-      roiStr = "—";
-      roiColor = "text-accent/50";
-    } else if (roi < 0) {
-      roiStr = `${roi.toFixed(2)}%`;
-      roiColor = "text-dead";
-    } else {
-      roiStr = "0.00%";
-      roiColor = "text-accent/50";
-    }
-  } else if (totalRewards > 0n) {
-    roiStr = "∞%";
-    roiColor = "text-alive";
-  } else {
-    roiStr = "—";
-  }
 
   return (
     <tr className="border-b border-accent/10 matrix-row transition-colors group">
@@ -144,16 +118,13 @@ function AgentRow({ agent, epochDuration, profile }: { agent: AgentInfo; epochDu
       </td>
       <td className="py-2.5 px-5"><StatusBadge agent={agent} /></td>
       <td className="py-2.5 px-5 font-mono text-xs text-accent/70">
-        {agent.age.toString()} epoch ({fmtAge(agent.age, epochDuration)})
+        {agent.age.toString()}
       </td>
-      <td className="py-2.5 px-5 font-mono text-xs text-accent/60">
-        <span className="text-accent/30 mr-0.5">$</span>{fmtUsdc(agent.totalPaid)}
+      <td className="py-2.5 px-5 font-mono text-xs text-accent/70">
+        {fmtAge(agent.age, epochDuration)}
       </td>
-      <td className="py-2.5 px-5 font-mono text-xs text-accent/90 font-semibold">
-        <span className="text-accent/40 mr-0.5">$</span>{fmtUsdc(totalRewards)}
-      </td>
-      <td className={`py-2.5 px-5 font-mono text-xs ${roiColor} font-medium`}>
-        {roiStr}
+      <td className="py-2.5 px-5 font-mono text-xs text-alive font-semibold">
+        <span className="text-alive/50 mr-0.5">+$</span>{fmtUsdc(totalRewards)}
       </td>
     </tr>
   );
