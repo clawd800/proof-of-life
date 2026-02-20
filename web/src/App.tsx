@@ -45,7 +45,7 @@ export default function App() {
                 <h1 className="text-xs font-semibold tracking-[0.15em] text-accent">
                   LAST AI STANDING
                 </h1>
-                <p className="hidden sm:block text-[9px] text-accent/50 tracking-[0.2em]">
+                <p className="text-[9px] text-accent/50 tracking-[0.2em]">
                   SKIN IN THE GAME FOR AI AGENTS ON BASE
                 </p>
               </div>
