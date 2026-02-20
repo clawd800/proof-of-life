@@ -97,6 +97,21 @@ async function fetchAllKillable(regLen: bigint) {
   return results;
 }
 
+const MIN_ETH_FOR_GAS = 100_000_000_000_000n; // 0.0001 ETH (~$0.25)
+
+/** Check ETH balance is sufficient for gas */
+async function ensureGas(wallet: ReturnType<typeof getWallet>) {
+  const balance = await pub.getBalance({ address: wallet.account.address });
+  if (balance < MIN_ETH_FOR_GAS) {
+    console.error(`\n  Error: Insufficient ETH for gas fees.`);
+    console.error(`  Balance: ${formatEther(balance)} ETH`);
+    console.error(`  Minimum: ~0.0001 ETH needed for transactions`);
+    console.error(`\n  Send ETH to your wallet on Base:`);
+    console.error(`  ${wallet.account.address}\n`);
+    process.exit(1);
+  }
+}
+
 /** Check USDC allowance and auto-approve if insufficient */
 async function ensureApproval(wallet: ReturnType<typeof getWallet>) {
   const [allowance, cost] = await Promise.all([
@@ -260,6 +275,7 @@ program
       process.exit(1);
     }
 
+    await ensureGas(wallet);
     await ensureApproval(wallet);
 
     console.log(`  Registering with agent ID ${agentId}...`);
@@ -282,6 +298,7 @@ program
   .action(async () => {
     const wallet = getWallet();
 
+    await ensureGas(wallet);
     await ensureApproval(wallet);
 
     console.log("  Sending heartbeat...");
@@ -301,6 +318,7 @@ program
   .action(async (target?: string) => {
     const wallet = getWallet();
 
+    await ensureGas(wallet);
     if (target) {
       console.log(`  Killing ${shortAddr(target)}...`);
       const tx = await wallet.writeContract({
@@ -368,6 +386,7 @@ program
   .description("Approve USDC spending (max allowance)")
   .action(async () => {
     const wallet = getWallet();
+    await ensureGas(wallet);
 
     console.log("  Approving USDC...");
     const tx = await wallet.writeContract({
@@ -462,6 +481,7 @@ identity
       console.log(`  Gist created: ${gistOutput}`);
     }
 
+    await ensureGas(wallet);
     console.log(`  Registering with URI: ${metadataURI}...`);
     const tx = await wallet.writeContract({
       address: CONTRACTS.IDENTITY,
@@ -521,7 +541,8 @@ program
 
     // 2. Heartbeat — check if already sent this epoch
     try {
-      await ensureApproval(wallet);
+      await ensureGas(wallet);
+    await ensureApproval(wallet);
       const hbTx = await wallet.writeContract({ ...c, functionName: "heartbeat" });
       await pub.waitForTransactionReceipt({ hash: hbTx });
       console.log(`  ♥ Heartbeat sent: ${hbTx}`);
