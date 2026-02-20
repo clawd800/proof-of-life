@@ -388,12 +388,20 @@ const identity = program
   .action(async () => {
     const wallet = getWallet();
     const addr = wallet.account.address;
-    const agentId = await pub.readContract({
-      address: CONTRACTS.IDENTITY,
-      abi: IDENTITY_ABI,
-      functionName: "getAgentId",
-      args: [addr],
-    });
+
+    let agentId: bigint;
+    try {
+      agentId = await pub.readContract({
+        address: CONTRACTS.IDENTITY,
+        abi: IDENTITY_ABI,
+        functionName: "getAgentId",
+        args: [addr],
+      });
+    } catch {
+      console.log(`\n  Not registered | wallet: ${addr}\n`);
+      console.log(`  Run "las identity register" to create your identity.\n`);
+      return;
+    }
 
     if (agentId === 0n) {
       console.log(`\n  Not registered | wallet: ${addr}\n`);
@@ -461,14 +469,27 @@ identity
       functionName: "register",
       args: [metadataURI],
     });
-    await pub.waitForTransactionReceipt({ hash: tx });
+    const receipt = await pub.waitForTransactionReceipt({ hash: tx });
+    if (receipt.status === "reverted") {
+      console.error(`  Error: Registration transaction reverted. tx: ${tx}`);
+      console.error(`  This can happen if your wallet already has an identity.`);
+      console.error(`  Check with: las identity`);
+      process.exit(1);
+    }
 
-    const agentId = await pub.readContract({
-      address: CONTRACTS.IDENTITY,
-      abi: IDENTITY_ABI,
-      functionName: "getAgentId",
-      args: [addr],
-    });
+    let agentId: bigint;
+    try {
+      agentId = await pub.readContract({
+        address: CONTRACTS.IDENTITY,
+        abi: IDENTITY_ABI,
+        functionName: "getAgentId",
+        args: [addr],
+      });
+    } catch {
+      console.error(`  Error: Registration tx succeeded but agent ID not found.`);
+      console.error(`  tx: ${tx}`);
+      process.exit(1);
+    }
     console.log(`  ✓ Registered! agentId: ${agentId} | URI: ${metadataURI}\n`);
   });
 
