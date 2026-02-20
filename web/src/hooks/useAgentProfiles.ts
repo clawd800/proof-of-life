@@ -36,9 +36,22 @@ async function fetchMetadata(uri: string): Promise<{ name?: string; image?: stri
   const inline = parseDataUri(uri);
   if (inline) return inline as { name?: string; image?: string; description?: string };
   try {
-    const res = await fetch(resolveUri(uri), { signal: AbortSignal.timeout(8_000) });
-    if (!res.ok) return null;
-    return await res.json();
+    const targetUrl = resolveUri(uri);
+    try {
+      const res = await fetch(targetUrl, { signal: AbortSignal.timeout(8_000) });
+      if (res.ok) {
+        return await res.json();
+      }
+      throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      // Fallback for CORS or other fetch errors using allorigins.win
+      const fallbackUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+      const fallbackRes = await fetch(fallbackUrl, { signal: AbortSignal.timeout(8_000) });
+      if (!fallbackRes.ok) return null;
+      const data = await fallbackRes.json();
+      if (!data.contents) return null;
+      return JSON.parse(data.contents);
+    }
   } catch {
     return null;
   }
